@@ -1,0 +1,62 @@
+{
+  "importDraftItems" : [
+
+  ],
+  "importDrafts" : [
+
+  ],
+  "interrupts" : [
+
+  ],
+  "preferences" : {
+    "lowDistractionMode" : true,
+    "petEdge" : "right",
+    "petOffsetY" : 689
+  },
+  "projects" : [
+
+  ],
+  "selectedTaskID" : "62CB6A89-7675-454E-A8FE-CB862FC9FA1E",
+  "sessions" : [
+    {
+      "endedAt" : "2026-03-27T02:31:02Z",
+      "id" : "4E317EBB-486F-4A2F-9C32-764BD13BBAD6",
+      "interruptionCount" : 0,
+      "startedAt" : "2026-03-27T02:31:00Z",
+      "state" : "paused",
+      "taskID" : "62CB6A89-7675-454E-A8FE-CB862FC9FA1E",
+      "totalSeconds" : 2
+    },
+    {
+      "endedAt" : "2026-03-27T02:31:00Z",
+      "id" : "7E6A2EFE-6E78-463C-8037-7DD2C95E3BBC",
+      "interruptionCount" : 0,
+      "startedAt" : "2026-03-27T02:24:26Z",
+      "state" : "paused",
+      "taskID" : "62CB6A89-7675-454E-A8FE-CB862FC9FA1E",
+      "totalSeconds" : 394
+    }
+  ],
+  "tasks" : [
+    {
+      "createdAt" : "2026-03-27T02:24:22Z",
+      "id" : "62CB6A89-7675-454E-A8FE-CB862FC9FA1E",
+      "importanceScore" : 1,
+      "isCurrent" : true,
+      "priority" : 0,
+      "quadrant" : "notUrgentNotImportant",
+      "smartActionableMissing" : true,
+      "smartBoundedMissing" : true,
+      "smartMeasurableMissing" : true,
+      "smartRelevantMissing" : true,
+      "smartSpecificMissing" : true,
+      "status" : "paused",
+      "tags" : [
+
+      ],
+      "title" : "开发软件",
+      "updatedAt" : "2026-03-27T02:31:02Z",
+      "urgencyScore" : 1
+    }
+  ]
+}

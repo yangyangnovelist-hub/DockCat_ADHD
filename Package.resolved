@@ -1,0 +1,78 @@
+{
+  "originHash" : "8944a930690c3bce986c4fc7b1d3e28014b8cf33e4953af13a5cefeeb4b78cc7",
+  "pins" : [
+    {
+      "identity" : "compactslider",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/buh/CompactSlider.git",
+      "state" : {
+        "revision" : "52a01bd09156152881c53ba235c862e3bf5690b1",
+        "version" : "2.1.0"
+      }
+    },
+    {
+      "identity" : "defaults",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sindresorhus/Defaults",
+      "state" : {
+        "revision" : "5bfac4928f000fabdbef7e4ed0251399bb0841c9",
+        "version" : "9.0.8"
+      }
+    },
+    {
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift",
+      "state" : {
+        "revision" : "36e30a6f1ef10e4194f6af0cff90888526f0c115",
+        "version" : "7.10.0"
+      }
+    },
+    {
+      "identity" : "notagif",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/curzel-it/notagif",
+      "state" : {
+        "revision" : "cdcff2cd114aac80724b562cd5305df04a7b9995",
+        "version" : "1.0.8"
+      }
+    },
+    {
+      "identity" : "schwifty",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/curzel-it/schwifty",
+      "state" : {
+        "revision" : "9620d6a851f4c81c458cfa37fe50d0906f872a9c",
+        "version" : "1.2.9"
+      }
+    },
+    {
+      "identity" : "splitview",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/stevengharris/SplitView.git",
+      "state" : {
+        "revision" : "ec90f7c254343849717af7c1e6b0fd0579207bf6",
+        "version" : "1.1.1"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "revision" : "2b59c0c741e9184ab057fd22950b491076d42e91",
+        "version" : "603.0.0"
+      }
+    },
+    {
+      "identity" : "windowsdetector",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/curzel-it/windowsdetector",
+      "state" : {
+        "revision" : "9649d329e30e692c32787dfb022119d0f6b173e8",
+        "version" : "1.0.5"
+      }
+    }
+  ],
+  "version" : 3
+}

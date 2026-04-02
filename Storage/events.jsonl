@@ -1,0 +1,1180 @@
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:22:19Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:22:19Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:22:19Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:22:19Z"
+}
+{
+  "details" : "04AB6511-5389-4AAB-8DFC-49216E2E1CF3",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T02:22:19Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:22:33Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:22:33Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:22:33Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:22:33Z"
+}
+{
+  "details" : "866B6D1A-C4F5-478E-B6AD-0CEAD7B37B77",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T02:22:33Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:24:00Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:24:00Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:24:00Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:24:00Z"
+}
+{
+  "details" : "BB23DFF9-0C65-47D1-A221-D4D3EC263247",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T02:24:00Z"
+}
+{
+  "details" : "开发软件",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:24:22Z"
+}
+{
+  "details" : "开发软件",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T02:24:26Z"
+}
+{
+  "details" : "true",
+  "event" : "preferences.low_distraction",
+  "timestamp" : "2026-03-27T02:24:36Z"
+}
+{
+  "details" : "false",
+  "event" : "preferences.low_distraction",
+  "timestamp" : "2026-03-27T02:24:37Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:29:31Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:29:31Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:29:31Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:29:31Z"
+}
+{
+  "details" : "A8C654E2-74B5-44B8-AF27-EA0C7FDAB660",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T02:29:31Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:30:20Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:30:20Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:30:20Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:30:20Z"
+}
+{
+  "details" : "6183EBD5-AD68-4C61-968C-DD1D18555F92",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T02:30:20Z"
+}
+{
+  "details" : "right:222.9609375",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:232.00390625",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:280.140625",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:362.90625",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:461.8984375",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:572.625",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:56Z"
+}
+{
+  "details" : "right:684.515625",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:30:59Z"
+}
+{
+  "details" : "62CB6A89-7675-454E-A8FE-CB862FC9FA1E",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T02:31:00Z"
+}
+{
+  "details" : "开发软件",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T02:31:00Z"
+}
+{
+  "details" : "62CB6A89-7675-454E-A8FE-CB862FC9FA1E",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T02:31:02Z"
+}
+{
+  "details" : "right:688.64453125",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:05Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:05Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:05Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:05Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:05Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:05Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:05Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:677.23828125",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:683.5234375",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:31:06Z"
+}
+{
+  "details" : "true",
+  "event" : "preferences.low_distraction",
+  "timestamp" : "2026-03-27T02:32:12Z"
+}
+{
+  "details" : "right:666.5",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:666.5",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:666.5",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:666.5",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:16Z"
+}
+{
+  "details" : "right:689.0",
+  "event" : "preferences.pet_placement",
+  "timestamp" : "2026-03-27T02:32:17Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:52:51Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:52:51Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:52:51Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:52:51Z"
+}
+{
+  "details" : "ACBCE087-6FA1-41D3-8D0E-CDFAD29C3C87",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T02:52:51Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:53:51Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:53:51Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:53:51Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T02:53:51Z"
+}
+{
+  "details" : "053C5028-2812-433B-98A3-500BD35260F3",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T02:53:51Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T02:54:12Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.outdented",
+  "timestamp" : "2026-03-27T02:54:13Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T02:54:14Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T02:54:16Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.outdented",
+  "timestamp" : "2026-03-27T02:54:17Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T02:54:18Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.outdented",
+  "timestamp" : "2026-03-27T02:54:19Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T02:54:21Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T02:54:23Z"
+}
+{
+  "details" : "AD87F4F2-9ABA-4FCA-B9BE-45F40FCA973A",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T02:54:25Z"
+}
+{
+  "details" : "AD87F4F2-9ABA-4FCA-B9BE-45F40FCA973A",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T02:54:28Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T02:54:33Z"
+}
+{
+  "details" : "ACF10E1B-BE74-49A6-A43F-1422D97A7872",
+  "event" : "task.outdented",
+  "timestamp" : "2026-03-27T02:54:36Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:10:01Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:10:01Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:10:01Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:10:01Z"
+}
+{
+  "details" : "DCA5B9CD-F338-4876-9FF2-54B55EB886B1",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T03:10:01Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:18:10Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:18:10Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:18:10Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:18:10Z"
+}
+{
+  "details" : "EC5F94BB-AADE-453D-9479-62FEEC9B4540",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T03:18:10Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:32:34Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:32:34Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:32:34Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:32:34Z"
+}
+{
+  "details" : "4AE9FE54-F4DB-4990-8812-ED40D9E485BB",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T03:32:34Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T03:33:18Z"
+}
+{
+  "details" : "EC5F94BB-AADE-453D-9479-62FEEC9B4540",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T03:33:20Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T03:33:20Z"
+}
+{
+  "details" : "EC5F94BB-AADE-453D-9479-62FEEC9B4540",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T03:33:20Z"
+}
+{
+  "details" : "EC5F94BB-AADE-453D-9479-62FEEC9B4540",
+  "event" : "task.completed",
+  "timestamp" : "2026-03-27T03:33:20Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T03:33:28Z"
+}
+{
+  "details" : "EC5F94BB-AADE-453D-9479-62FEEC9B4540",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T03:33:29Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T03:33:29Z"
+}
+{
+  "details" : "EC5F94BB-AADE-453D-9479-62FEEC9B4540",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T03:33:31Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T03:33:31Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:50:51Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:50:51Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:50:51Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:50:51Z"
+}
+{
+  "details" : "2CFF1E1F-C068-4B07-BA75-8479727C3049",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T03:50:51Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:54:56Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:54:56Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:54:56Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:54:56Z"
+}
+{
+  "details" : "8A310EA6-6888-4367-8E77-0F17FE0BBCB5",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T03:54:56Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:56:57Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:56:57Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:56:57Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T03:56:57Z"
+}
+{
+  "details" : "E2AA07A6-694F-4963-A7C7-84A079594619",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T03:56:57Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:00:51Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:00:51Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:00:51Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:00:51Z"
+}
+{
+  "details" : "E642A8D6-EFDE-48B9-BBA0-78A6654EFBC2",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T04:00:51Z"
+}
+{
+  "details" : "text:71 items",
+  "event" : "import.parsed",
+  "timestamp" : "2026-03-27T04:02:19Z"
+}
+{
+  "details" : "96FED98D-C474-4BF2-9F6F-BC4A62E2F1C9",
+  "event" : "import.accepted",
+  "timestamp" : "2026-03-27T04:08:48Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:14:22Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:14:22Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:14:22Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:14:22Z"
+}
+{
+  "details" : "9BC99F9B-1C65-490C-B193-73C33204D032",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T04:14:22Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:16:09Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:16:09Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:16:09Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:16:09Z"
+}
+{
+  "details" : "358B23AF-9956-44BA-A942-04D7806A72DD",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T04:16:09Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T04:18:28Z"
+}
+{
+  "details" : "9BC99F9B-1C65-490C-B193-73C33204D032",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T04:18:36Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T04:18:36Z"
+}
+{
+  "details" : "9BC99F9B-1C65-490C-B193-73C33204D032",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T04:18:38Z"
+}
+{
+  "details" : "9BC99F9B-1C65-490C-B193-73C33204D032",
+  "event" : "task.completed",
+  "timestamp" : "2026-03-27T04:18:38Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:40:46Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:40:46Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:40:46Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T04:40:46Z"
+}
+{
+  "details" : "BC1ECF5C-5672-42E7-8DBE-675EC2D56BDA",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T04:40:46Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T05:26:36Z"
+}
+{
+  "details" : "9BC99F9B-1C65-490C-B193-73C33204D032",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T05:26:38Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T05:26:39Z"
+}
+{
+  "details" : "9BC99F9B-1C65-490C-B193-73C33204D032",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T05:26:39Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "session.started",
+  "timestamp" : "2026-03-27T05:26:39Z"
+}
+{
+  "details" : "9BC99F9B-1C65-490C-B193-73C33204D032",
+  "event" : "session.paused",
+  "timestamp" : "2026-03-27T05:32:12Z"
+}
+{
+  "details" : "C2F13DCE-D1AA-4966-8718-2C78BB98F6EF",
+  "event" : "task.outdented",
+  "timestamp" : "2026-03-27T05:32:55Z"
+}
+{
+  "details" : "9BC99F9B-1C65-490C-B193-73C33204D032",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T05:59:03Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T08:34:10Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T08:34:10Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T08:34:10Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T08:34:10Z"
+}
+{
+  "details" : "54B83FF6-5D41-488D-8C7A-9C51BDE717E2",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T08:34:10Z"
+}
+{
+  "details" : "准备产品发布",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T08:42:08Z"
+}
+{
+  "details" : "整理 landing page",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T08:42:08Z"
+}
+{
+  "details" : "做 demo 视频",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T08:42:08Z"
+}
+{
+  "details" : "写 FAQ",
+  "event" : "task.created",
+  "timestamp" : "2026-03-27T08:42:08Z"
+}
+{
+  "details" : "DFDBF268-9288-403B-BD96-BB2984CCA064",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T08:42:08Z"
+}
+{
+  "details" : "54B83FF6-5D41-488D-8C7A-9C51BDE717E2",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T08:45:10Z"
+}
+{
+  "details" : "54B83FF6-5D41-488D-8C7A-9C51BDE717E2",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T08:45:40Z"
+}
+{
+  "details" : "54B83FF6-5D41-488D-8C7A-9C51BDE717E2",
+  "event" : "task.selected",
+  "timestamp" : "2026-03-27T08:47:50Z"
+}
+{
+  "details" : "A62829D7-AD33-4B90-BEB0-0188CC3CCA33",
+  "event" : "task.indented",
+  "timestamp" : "2026-03-27T08:48:08Z"
+}
+{
+  "details" : "A62829D7-AD33-4B90-BEB0-0188CC3CCA33",
+  "event" : "task.outdented",
+  "timestamp" : "2026-03-27T08:48:17Z"
+}
+{
+  "details" : "A62829D7-AD33-4B90-BEB0-0188CC3CCA33",
+  "event" : "task.outdented",
+  "timestamp" : "2026-03-27T08:48:18Z"
+}
