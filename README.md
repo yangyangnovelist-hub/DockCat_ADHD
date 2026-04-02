@@ -9,12 +9,19 @@
 
 **DockCat_ADHD** is a powerful agentic AI coding and task assistant specifically designed for users with ADHD. It focuses on maximizing focus, clarity, and minimizing cognitive load through a native, high-performance macOS interface.
 
-### ✨ Highlights
-- **Productivity Mascot**: A cute "Dock Cat" that stays on your screen to keep you grounded and focused.
-- **Natural Task Ingestion**: Move away from rigid syntax; express your tasks naturally and let AI handle the heavy lifting.
-- **Deep macOS Integration**: Native performance with Swift and SwiftUI.
-- **Mind Map Visualization**: Automatically transform your task lists into interactive mind maps.
-- **Low-Distraction Mode**: Hide everything that doesn't matter right now.
+### ✨ Current Features
+- **Productivity Mascot**: A cute "Dock Cat" (currently stays static in "front" mode to minimize distraction) that stays on your screen to keep you grounded.
+- **Native Task Management**: Swift-based native UI with drag-and-drop support for re-parenting tasks.
+- **Deep macOS Integration**: High-performance SwiftUI implementation with multi-window support.
+- **Mind Map Visualization**: Automatically transform your task lists into interactive mind maps (WebView based).
+- **Sticky Note Mode**: A quick-access task board that behaves like a physical sticky note.
+- **Low-Distraction Mode**: Hide everything that doesn't matter right now with one click.
+- **Background Task Monitoring**: Keep track of multiple tasks simultaneously while focusing on a primary goal.
+
+### 🚧 Limitations & Roadmap
+- **AI Task Ingestion**: Currently relies on a rule-based syntax parser (`VikunjaQuickAdd`). AI-driven semantic parsing is under development.
+- **Animation States**: Currently limited to static "idle" views by user preference; dynamic animations are implemented in the engine but disabled.
+- **Syncing**: Local-first storage (SQLite/GRDB); cloud sync across devices is not yet implemented.
 
 ### 🚀 Getting Started
 1. Clone the repository.
@@ -28,12 +35,19 @@
 
 **DockCat_ADHD** 是一款专为 ADHD（多动症/注意力不集中）开发者和日常用户设计的强力 AI 代理任务助理。它通过原生、高性能的 macOS 界面，致力于最大化用户的专注度，减少认知负荷。
 
-### ✨ 项目亮点
-- **专注力萌物**：屏幕右下角的“Dock Cat”时刻提醒你回到当下，通过视觉陪伴缓解焦虑和分心。
-- **自然语言导入**：告别死板的语法（如 Vikunja/Todoist 语法），通过 AI 自动从自然对话中拆解主题、子任务。
-- **原生 macOS 体验**：基于 Swift 和 SwiftUI 开发，快如闪电。
-- **脑图动态同步**：自动将任务清单转化为可视化脑图，帮你在混乱中理清逻辑结构。
-- **超低干扰模式**：一键隐藏所有非必要信息，只留下当前最重要的唯一焦点。
+### ✨ 现有功能
+- **专注力萌物**：屏幕右下角的 “Dock Cat”（目前已设为静坐模式以减少分心），时刻视觉陪伴。
+- **原生任务管理**：基于 Swift 的高性能 UI，支持通过拖拽自由调整任务层级（母子任务切换）。
+- **原生 macOS 体验**：使用 SwiftUI 开发，支持多窗口协同。
+- **脑图动态同步**：自动将任务清单转化为可视化脑图（基于 WebView），理清各级逻辑。
+- **便签模式**：像物理便利贴一样的快速任务看板，随点随用。
+- **超低干扰模式**：一键隐藏非必要信息，聚焦唯一重点。
+- **后台任务监控**：在专注主线任务的同时，实时追踪多个后台进行的子任务。
+
+### 🚧 缺陷与后续计划
+- **AI 识别能力**：目前的“批量导入”仍依赖硬编码的解析规则（Vikunja 语法），尚不支持完全的自然语言语义拆解（开发中）。
+- **动效状态**：应用户要求，目前猫猫采用静止状态；引擎层支持完整动效但已主动禁用。
+- **数据同步**：目前为本地优先存储（基于 SQLite/GRDB），尚未实现多端云同步。
 
 ### 🚀 如何开始
 1. 克隆本仓库。
