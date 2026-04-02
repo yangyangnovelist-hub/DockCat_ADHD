@@ -20,7 +20,7 @@
 
 ### 🚧 Limitations & Roadmap
 - **AI Task Ingestion**: Currently relies on a rule-based syntax parser (`VikunjaQuickAdd`). AI-driven semantic parsing is under development.
-- **Animation States**: Currently limited to static "idle" views by user preference; dynamic animations are implemented in the engine but disabled.
+- **Animation States**: Currently limited to static "idle" views by user preference; I tried my best to generate usable dynamic animations but failed. Some animations are implemented in the engine but operate awfully. Please help if you like the cat.
 - **Syncing**: Local-first storage (SQLite/GRDB); cloud sync across devices is not yet implemented.
 
 ### 🚀 Getting Started
@@ -46,7 +46,7 @@
 
 ### 🚧 缺陷与后续计划
 - **AI 识别能力**：目前的“批量导入”仍依赖硬编码的解析规则（Vikunja 语法），尚不支持完全的自然语言语义拆解（开发中）。
-- **动效状态**：应用户要求，目前猫猫采用静止状态；引擎层支持完整动效但已主动禁用。
+- **动效状态**：目前猫猫采用静止状态.我尝试了所有生成图片的办法制作动画，可惜效果非常的差，无奈之下只能锁定蹲坐效果。文件中有部分生成的动画图片，但是大小不一，尺寸不一，会有闪动现象。如果有喜爱小猫的朋友，欢迎制作自己使用，并帮忙上传更新。
 - **数据同步**：目前为本地优先存储（基于 SQLite/GRDB），尚未实现多端云同步。
 
 ### 🚀 如何开始
