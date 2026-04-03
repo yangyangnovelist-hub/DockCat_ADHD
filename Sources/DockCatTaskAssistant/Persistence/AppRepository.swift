@@ -14,6 +14,7 @@ actor AppRepository {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let preferencesStore: AppPreferencesStore
+    private var latestSavedSnapshotGeneration = 0
 
     init(baseDirectory: URL? = nil) {
         let fileManager = FileManager.default
@@ -55,13 +56,41 @@ actor AppRepository {
         }
     }
 
+    init(
+        dbQueue: DatabaseQueue,
+        preferencesStore: AppPreferencesStore = AppPreferencesStore()
+    ) throws {
+        self.dbQueue = dbQueue
+        self.preferencesStore = preferencesStore
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        self.encoder = encoder
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        self.decoder = decoder
+
+        let transientDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("DockCatTaskAssistantTests", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        self.legacySnapshotURL = transientDirectory.appendingPathComponent("snapshot.json")
+        self.eventLogURL = transientDirectory.appendingPathComponent("events.jsonl")
+
+        try Self.migrator.migrate(dbQueue)
+    }
+
     func loadSnapshot() -> AppSnapshot {
         let preferences = preferencesStore.load()
 
         do {
             return try dbQueue.read { db in
                 let projects = try ProjectRecord.fetchAll(db).map(\.project)
-                let tasks = try TaskRecord.fetchAll(db).map { try $0.task(decoder: decoder) }
+                let tasks = try TaskRecord
+                    .filter(Column("tombstone") == false)
+                    .fetchAll(db)
+                    .map { try $0.task(decoder: decoder) }
                 let sessions = try SessionRecord.fetchAll(db).map(\.session)
                 let interrupts = try InterruptRecord.fetchAll(db).map(\.interrupt)
                 let importDrafts = try ImportDraftRecord.fetchAll(db).map(\.draft)
@@ -96,7 +125,10 @@ actor AppRepository {
         }
     }
 
-    func saveSnapshot(_ snapshot: AppSnapshot) async {
+    func saveSnapshot(_ snapshot: AppSnapshot, generation: Int = 0) async {
+        guard generation >= latestSavedSnapshotGeneration else { return }
+        latestSavedSnapshotGeneration = generation
+
         do {
             try writeSnapshot(snapshot)
             preferencesStore.save(snapshot.preferences)
@@ -166,39 +198,14 @@ actor AppRepository {
 
     private static func writeSnapshot(_ snapshot: AppSnapshot, dbQueue: DatabaseQueue, encoder: JSONEncoder) throws {
         try dbQueue.write { db in
-            try AppStateRecord.deleteAll(db)
-            try ImportDraftItemRecord.deleteAll(db)
-            try ImportDraftRecord.deleteAll(db)
-            try InterruptRecord.deleteAll(db)
-            try SessionRecord.deleteAll(db)
-            try TaskRecord.deleteAll(db)
-            try ProjectRecord.deleteAll(db)
+            try syncProjects(snapshot.projects, db: db)
+            try syncTasks(snapshot.tasks, db: db, encoder: encoder)
+            try syncSessions(snapshot.sessions, db: db)
+            try syncInterrupts(snapshot.interrupts, db: db)
+            try syncImportDrafts(snapshot.importDrafts, db: db)
+            try syncImportDraftItems(snapshot.importDraftItems, db: db, encoder: encoder)
 
-            for project in snapshot.projects {
-                try ProjectRecord(project).insert(db)
-            }
-
-            for task in snapshot.tasks {
-                try TaskRecord(task, encoder: encoder).insert(db)
-            }
-
-            for session in snapshot.sessions {
-                try SessionRecord(session).insert(db)
-            }
-
-            for interrupt in snapshot.interrupts {
-                try InterruptRecord(interrupt).insert(db)
-            }
-
-            for draft in snapshot.importDrafts {
-                try ImportDraftRecord(draft).insert(db)
-            }
-
-            for item in snapshot.importDraftItems {
-                try ImportDraftItemRecord(item, encoder: encoder).insert(db)
-            }
-
-            try AppStateRecord(
+            let appState = AppStateRecord(
                 selectedTaskID: snapshot.selectedTaskID?.uuidString,
                 lastCelebrationAt: snapshot.lastCelebrationAt?.timeIntervalSince1970,
                 mindMapDataJSON: snapshot.mindMapDocument.dataJSON,
@@ -207,7 +214,102 @@ actor AppRepository {
                 mindMapLanguage: snapshot.mindMapDocument.language,
                 mindMapUpdatedAt: snapshot.mindMapDocument.updatedAt.timeIntervalSince1970
             )
-            .insert(db)
+            try appState.save(db)
+        }
+    }
+
+    private static func syncProjects(_ projects: [Project], db: Database) throws {
+        let incomingIDs = Set(projects.map(\.id.uuidString))
+        let existingIDs = Set(try String.fetchAll(db, sql: "SELECT id FROM \(ProjectRecord.databaseTableName)"))
+
+        for project in projects {
+            let record = ProjectRecord(project)
+            try record.save(db)
+        }
+
+        for removedID in existingIDs.subtracting(incomingIDs) {
+            _ = try ProjectRecord.deleteOne(db, key: removedID)
+        }
+    }
+
+    private static func syncTasks(_ tasks: [Task], db: Database, encoder: JSONEncoder) throws {
+        let incomingIDs = Set(tasks.map(\.id.uuidString))
+        let existingTaskRecords = try TaskRecord.fetchAll(db)
+        let existingActiveIDs = Set(existingTaskRecords.filter { !$0.tombstone }.map(\.id))
+
+        for task in tasks {
+            var record = try TaskRecord(task, encoder: encoder)
+            record.tombstone = false
+            try record.save(db)
+        }
+
+        let removedIDs = existingActiveIDs.subtracting(incomingIDs)
+        guard !removedIDs.isEmpty else { return }
+
+        let now = Date().timeIntervalSince1970
+        for removedID in removedIDs {
+            guard var record = existingTaskRecords.first(where: { $0.id == removedID }) else { continue }
+            record.tombstone = true
+            record.version += 1
+            record.updatedAt = now
+            record.isCurrent = false
+            try record.save(db)
+        }
+    }
+
+    private static func syncSessions(_ sessions: [Session], db: Database) throws {
+        let incomingIDs = Set(sessions.map(\.id.uuidString))
+        let existingIDs = Set(try String.fetchAll(db, sql: "SELECT id FROM \(SessionRecord.databaseTableName)"))
+
+        for session in sessions {
+            let record = SessionRecord(session)
+            try record.save(db)
+        }
+
+        for removedID in existingIDs.subtracting(incomingIDs) {
+            _ = try SessionRecord.deleteOne(db, key: removedID)
+        }
+    }
+
+    private static func syncInterrupts(_ interrupts: [Interrupt], db: Database) throws {
+        let incomingIDs = Set(interrupts.map(\.id.uuidString))
+        let existingIDs = Set(try String.fetchAll(db, sql: "SELECT id FROM \(InterruptRecord.databaseTableName)"))
+
+        for interrupt in interrupts {
+            let record = InterruptRecord(interrupt)
+            try record.save(db)
+        }
+
+        for removedID in existingIDs.subtracting(incomingIDs) {
+            _ = try InterruptRecord.deleteOne(db, key: removedID)
+        }
+    }
+
+    private static func syncImportDrafts(_ drafts: [ImportDraft], db: Database) throws {
+        let incomingIDs = Set(drafts.map(\.id.uuidString))
+        let existingIDs = Set(try String.fetchAll(db, sql: "SELECT id FROM \(ImportDraftRecord.databaseTableName)"))
+
+        for draft in drafts {
+            let record = ImportDraftRecord(draft)
+            try record.save(db)
+        }
+
+        for removedID in existingIDs.subtracting(incomingIDs) {
+            _ = try ImportDraftRecord.deleteOne(db, key: removedID)
+        }
+    }
+
+    private static func syncImportDraftItems(_ items: [ImportDraftItem], db: Database, encoder: JSONEncoder) throws {
+        let incomingIDs = Set(items.map(\.id.uuidString))
+        let existingIDs = Set(try String.fetchAll(db, sql: "SELECT id FROM \(ImportDraftItemRecord.databaseTableName)"))
+
+        for item in items {
+            let record = try ImportDraftItemRecord(item, encoder: encoder)
+            try record.save(db)
+        }
+
+        for removedID in existingIDs.subtracting(incomingIDs) {
+            _ = try ImportDraftItemRecord.deleteOne(db, key: removedID)
         }
     }
 
@@ -380,18 +482,39 @@ actor AppRepository {
         }
 
         migrator.registerMigration("v4_mind_map_document") { db in
+            let existingColumns = try Set(db.columns(in: AppStateRecord.databaseTableName).map(\.name))
             try db.alter(table: AppStateRecord.databaseTableName) { t in
-                t.add(column: "mindMapDataJSON", .text).notNull().defaults(to: AppSnapshot.empty.mindMapDocument.dataJSON)
-                t.add(column: "mindMapConfigJSON", .text)
-                t.add(column: "mindMapLocalConfigJSON", .text)
-                t.add(column: "mindMapLanguage", .text).notNull().defaults(to: AppSnapshot.empty.mindMapDocument.language)
-                t.add(column: "mindMapUpdatedAt", .double).notNull().defaults(to: AppSnapshot.empty.mindMapDocument.updatedAt.timeIntervalSince1970)
+                if !existingColumns.contains("mindMapDataJSON") {
+                    t.add(column: "mindMapDataJSON", .text).notNull().defaults(to: AppSnapshot.empty.mindMapDocument.dataJSON)
+                }
+                if !existingColumns.contains("mindMapConfigJSON") {
+                    t.add(column: "mindMapConfigJSON", .text)
+                }
+                if !existingColumns.contains("mindMapLocalConfigJSON") {
+                    t.add(column: "mindMapLocalConfigJSON", .text)
+                }
+                if !existingColumns.contains("mindMapLanguage") {
+                    t.add(column: "mindMapLanguage", .text).notNull().defaults(to: AppSnapshot.empty.mindMapDocument.language)
+                }
+                if !existingColumns.contains("mindMapUpdatedAt") {
+                    t.add(column: "mindMapUpdatedAt", .double).notNull().defaults(to: AppSnapshot.empty.mindMapDocument.updatedAt.timeIntervalSince1970)
+                }
             }
         }
 
         migrator.registerMigration("v5_task_sort_index") { db in
+            let existingColumns = try Set(db.columns(in: TaskRecord.databaseTableName).map(\.name))
+            guard !existingColumns.contains("sortIndex") else { return }
             try db.alter(table: TaskRecord.databaseTableName) { t in
                 t.add(column: "sortIndex", .integer).notNull().defaults(to: 0)
+            }
+        }
+
+        migrator.registerMigration("v6_task_sync_metadata") { db in
+            try db.alter(table: TaskRecord.databaseTableName) { t in
+                t.add(column: "version", .integer).notNull().defaults(to: 1)
+                t.add(column: "tombstone", .boolean).notNull().defaults(to: false)
+                t.add(column: "device_id", .text)
             }
         }
 
@@ -477,6 +600,9 @@ private struct TaskRecord: Codable, FetchableRecord, PersistableRecord, TableRec
     var createdAt: Double
     var updatedAt: Double
     var completedAt: Double?
+    var version: Int
+    var tombstone: Bool
+    var device_id: String?
 
     init(_ task: Task, encoder: JSONEncoder) throws {
         self.id = task.id.uuidString
@@ -505,6 +631,9 @@ private struct TaskRecord: Codable, FetchableRecord, PersistableRecord, TableRec
         self.createdAt = task.createdAt.timeIntervalSince1970
         self.updatedAt = task.updatedAt.timeIntervalSince1970
         self.completedAt = task.completedAt?.timeIntervalSince1970
+        self.version = task.version
+        self.tombstone = task.tombstone
+        self.device_id = task.device_id
     }
 
     func task(decoder: JSONDecoder) throws -> Task {
@@ -534,7 +663,10 @@ private struct TaskRecord: Codable, FetchableRecord, PersistableRecord, TableRec
             isCurrent: isCurrent,
             createdAt: Date(timeIntervalSince1970: createdAt),
             updatedAt: Date(timeIntervalSince1970: updatedAt),
-            completedAt: completedAt.map(Date.init(timeIntervalSince1970:))
+            completedAt: completedAt.map(Date.init(timeIntervalSince1970:)),
+            version: version,
+            tombstone: tombstone,
+            device_id: device_id
         )
     }
 }

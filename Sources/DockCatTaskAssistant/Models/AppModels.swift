@@ -260,6 +260,9 @@ struct Task: Codable, Identifiable, Hashable, Sendable {
     var createdAt: Date
     var updatedAt: Date
     var completedAt: Date?
+    var version: Int
+    var tombstone: Bool
+    var device_id: String?
 
     init(
         id: UUID,
@@ -287,7 +290,10 @@ struct Task: Codable, Identifiable, Hashable, Sendable {
         isCurrent: Bool,
         createdAt: Date,
         updatedAt: Date,
-        completedAt: Date?
+        completedAt: Date?,
+        version: Int = 1,
+        tombstone: Bool = false,
+        device_id: String? = nil
     ) {
         self.id = id
         self.projectID = projectID
@@ -315,6 +321,9 @@ struct Task: Codable, Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.completedAt = completedAt
+        self.version = version
+        self.tombstone = tombstone
+        self.device_id = device_id
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -344,6 +353,9 @@ struct Task: Codable, Identifiable, Hashable, Sendable {
         case createdAt
         case updatedAt
         case completedAt
+        case version
+        case tombstone
+        case device_id
     }
 
     init(from decoder: Decoder) throws {
@@ -374,6 +386,9 @@ struct Task: Codable, Identifiable, Hashable, Sendable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        tombstone = try container.decodeIfPresent(Bool.self, forKey: .tombstone) ?? false
+        device_id = try container.decodeIfPresent(String.self, forKey: .device_id)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -404,6 +419,9 @@ struct Task: Codable, Identifiable, Hashable, Sendable {
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        try container.encode(version, forKey: .version)
+        try container.encode(tombstone, forKey: .tombstone)
+        try container.encodeIfPresent(device_id, forKey: .device_id)
     }
 
     var smartHints: [String] {
@@ -418,6 +436,11 @@ struct Task: Codable, Identifiable, Hashable, Sendable {
 
     var priorityVectorScore: Double {
         PriorityVector.projection(urgencyValue: urgencyValue, importanceValue: importanceValue)
+    }
+
+    mutating func touch() {
+        version += 1
+        updatedAt = Date()
     }
 }
 
@@ -689,7 +712,7 @@ struct DraftItemSnapshotDraft {
     var isAccepted: Bool
 }
 
-private extension String {
+extension String {
     var nilIfEmpty: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed

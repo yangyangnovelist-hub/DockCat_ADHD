@@ -70,7 +70,7 @@ enum MindMapTaskSynchronizer {
                 var updated = task
                 updated.status = .archived
                 updated.isCurrent = false
-                updated.updatedAt = now
+                updated.touch()
                 return updated
             }
 
@@ -177,7 +177,7 @@ enum MindMapTaskSynchronizer {
                 task.completedAt = nil
             }
             if fieldsChanged {
-                task.updatedAt = now
+                task.touch()
             }
             return task
         }
@@ -282,12 +282,5 @@ enum MindMapTaskSynchronizer {
             return nil
         }
         return string
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

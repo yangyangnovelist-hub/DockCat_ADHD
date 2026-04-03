@@ -20,6 +20,71 @@ final class AppModel: ObservableObject {
     private var inputIdleTask: _Concurrency.Task<Void, Never>?
     private var autosaveTimer: Timer?
     private var lastExternalInputAt: Date?
+    private var saveGeneration = 0
+    private lazy var syncUseCases = SyncUseCases(
+        getState: { [unowned self] in
+            SyncUseCases.State(
+                snapshot: self.snapshot,
+                priorityPromptTaskID: self.priorityPromptTaskID
+            )
+        },
+        mutateState: { [unowned self] mutate in
+            self.withMutableSyncUseCasesState(mutate)
+        },
+        persist: { [unowned self] event, details in
+            self.persist(event: event, details: details)
+        },
+        mirrorImportedItemsBridge: { [appleRemindersBridge] items in
+            await appleRemindersBridge.mirrorImportedItems(items)
+        }
+    )
+    private lazy var taskUseCases = TaskUseCases(
+        getState: { [unowned self] in
+            TaskUseCases.State(
+                snapshot: self.snapshot,
+                priorityPromptTaskID: self.priorityPromptTaskID
+            )
+        },
+        mutateState: { [unowned self] mutate in
+            self.withMutableTaskUseCasesState(mutate)
+        },
+        synchronizeMindMapFromTasks: { [unowned self] force in
+            self.syncUseCases.synchronizeMindMapFromTasks(force: force)
+        },
+        persist: { [unowned self] event, details in
+            self.persist(event: event, details: details)
+        },
+        refreshPetState: { [unowned self] in
+            self.refreshPetState()
+        }
+    )
+    private lazy var importUseCases = ImportUseCases(
+        getState: { [unowned self] in
+            ImportUseCases.State(
+                snapshot: self.snapshot,
+                importText: self.importText,
+                isImportParsing: self.isImportParsing,
+                isAudioTranscribing: self.isAudioTranscribing,
+                importErrorMessage: self.importErrorMessage,
+                importRuntimeNote: self.importRuntimeNote
+            )
+        },
+        mutateState: { [unowned self] mutate in
+            self.withMutableImportUseCasesState(mutate)
+        },
+        synchronizeMindMapFromTasks: { [unowned self] force in
+            self.syncUseCases.synchronizeMindMapFromTasks(force: force)
+        },
+        mirrorImportedItems: { [unowned self] items in
+            await self.syncUseCases.mirrorImportedItems(items)
+        },
+        persist: { [unowned self] event, details in
+            self.persist(event: event, details: details)
+        },
+        refreshPetState: { [unowned self] in
+            self.refreshPetState()
+        }
+    )
 
     init(
         repository: AppRepository = AppRepository(),
@@ -32,12 +97,12 @@ final class AppModel: ObservableObject {
         self.importText = ""
         self.petState = PetStateMachine.resolve(snapshot: loadedSnapshot, isHovering: false, lastExternalInputAt: nil)
 
-        _Concurrency.Task {
+        _Concurrency.Task(priority: .utility) { [repository] in
             let restored = await repository.loadSnapshot()
             await MainActor.run {
                 let (sanitizedSnapshot, didSanitizeSnapshot) = Self.sanitizeRestoredSnapshot(restored)
                 self.snapshot = sanitizedSnapshot
-                let didReconcileMindMap = self.reconcileMindMapAndTasksOnRestore()
+                let didReconcileMindMap = self.syncUseCases.reconcileMindMapAndTasksOnRestore()
                 self.importText = sanitizedSnapshot.importDrafts.last?.rawText ?? Self.seedImportText
                 self.refreshPetState(shouldPersist: false)
                 self.startAutosaveTimer()
@@ -89,25 +154,7 @@ final class AppModel: ObservableObject {
     }
 
     func bootstrapIfNeeded() {
-        guard snapshot.tasks.isEmpty else { return }
-        if snapshot.preferences.lowDistractionMode == false {
-            snapshot.preferences.lowDistractionMode = true
-        }
-
-        let seedTasks: [(title: String, urgency: Double, importance: Double)] = [
-            ("今天回客户定价邮件", 92, 88),
-            ("这周整理官网 FAQ", 58, 76),
-            ("补充下一版灵感池", 28, 34),
-        ]
-
-        for (index, seed) in seedTasks.enumerated() {
-            guard let taskID = addTask(title: seed.title) else { continue }
-            applyPrioritySelection(for: taskID, urgencyValue: seed.urgency, importanceValue: seed.importance)
-            if index == 0 {
-                setCurrentTask(id: taskID)
-            }
-        }
-        synchronizeMindMapFromTasks(force: true)
+        taskUseCases.bootstrapIfNeeded()
     }
 
     @discardableResult
@@ -117,68 +164,12 @@ final class AppModel: ObservableObject {
         parentTaskID: UUID? = nil,
         promptForPriority: Bool = false
     ) -> UUID? {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let now = Date()
-        let suggestedUrgency = QuadrantAdvisor.urgencyScore(for: trimmed)
-        let suggestedImportance = QuadrantAdvisor.importanceScore(for: trimmed)
-        let urgency = promptForPriority ? 0 : suggestedUrgency
-        let importance = promptForPriority ? 0 : suggestedImportance
-        let urgencyValue = promptForPriority ? 50.0 : PriorityVector.value(from: suggestedUrgency)
-        let importanceValue = promptForPriority ? 50.0 : PriorityVector.value(from: suggestedImportance)
-        let smartEntries = SmartEvaluator.seededEntries(title: trimmed, notes: notes)
-        let smart = SmartEvaluator.evaluate(title: trimmed, notes: notes, smartEntries: smartEntries)
-
-        let task = Task(
-            id: UUID(),
-            projectID: nil,
-            parentTaskID: parentTaskID,
-            sortIndex: nextSortIndex(for: parentTaskID),
-            title: trimmed,
+        taskUseCases.addTask(
+            title: title,
             notes: notes,
-            status: .todo,
-            priority: promptForPriority
-                ? 0
-                : PriorityVector.derivedPriority(
-                    urgencyValue: urgencyValue,
-                    importanceValue: importanceValue
-                ),
-            urgencyScore: urgency,
-            importanceScore: importance,
-            urgencyValue: urgencyValue,
-            importanceValue: importanceValue,
-            quadrant: promptForPriority
-                ? nil
-                : PriorityVector.quadrant(
-                    urgencyValue: urgencyValue,
-                    importanceValue: importanceValue
-                ),
-            estimatedMinutes: nil,
-            dueAt: nil,
-            smartSpecificMissing: smart.specificMissing,
-            smartMeasurableMissing: smart.measurableMissing,
-            smartActionableMissing: smart.actionableMissing,
-            smartRelevantMissing: smart.relevantMissing,
-            smartBoundedMissing: smart.boundedMissing,
-            smartEntries: smartEntries,
-            tags: [],
-            isCurrent: snapshot.selectedTaskID == nil,
-            createdAt: now,
-            updatedAt: now,
-            completedAt: nil
+            parentTaskID: parentTaskID,
+            promptForPriority: promptForPriority
         )
-
-        snapshot.tasks.append(task)
-        if snapshot.selectedTaskID == nil {
-            snapshot.selectedTaskID = task.id
-        }
-        if promptForPriority {
-            priorityPromptTaskID = task.id
-        }
-        synchronizeMindMapFromTasks()
-        persist(event: "task.created", details: task.title)
-        refreshPetState()
-        return task.id
     }
 
     func task(id: UUID?) -> Task? {
@@ -248,168 +239,36 @@ final class AppModel: ObservableObject {
     }
 
     func setCurrentTask(id: UUID) {
-        let previousTaskID = snapshot.selectedTaskID ?? snapshot.tasks.first(where: \.isCurrent)?.id
-        if previousTaskID != id {
-            pauseLeavingTaskIfNeeded(previousTaskID)
-        }
-        snapshot.selectedTaskID = id
-        let now = Date()
-        snapshot.tasks = snapshot.tasks.map { task in
-            var updated = task
-            let newIsCurrent = updated.id == id
-            let isCurrentChanged = updated.isCurrent != newIsCurrent
-            let statusChanged = updated.id == id && updated.status == .done
-            updated.isCurrent = newIsCurrent
-            if statusChanged {
-                updated.status = .todo
-            }
-            if isCurrentChanged || statusChanged {
-                updated.updatedAt = now
-            }
-            return updated
-        }
-        persist(event: "task.selected", details: id.uuidString)
-        refreshPetState()
+        taskUseCases.setCurrentTask(id: id)
     }
 
     @discardableResult
     func addChildTask(parentID: UUID, promptForPriority: Bool = false) -> UUID? {
-        addTask(
-            title: "新的子任务",
-            notes: nil,
-            parentTaskID: parentID,
-            promptForPriority: promptForPriority
-        )
+        taskUseCases.addChildTask(parentID: parentID, promptForPriority: promptForPriority)
     }
 
     func renameTask(id: UUID, title: String) {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        mutateTask(id: id) { task in
-            task.title = trimmed
-        }
-        synchronizeMindMapFromTasks()
-        persist(event: "task.renamed", details: id.uuidString)
-        refreshPetState()
+        taskUseCases.renameTask(id: id, title: title)
     }
 
     func indentTask(id: UUID) {
-        guard let currentIndex = tasks.firstIndex(where: { $0.id == id }), currentIndex > 0 else { return }
-        let candidateParent = tasks[currentIndex - 1]
-        mutateTask(id: id) { task in
-            task.parentTaskID = candidateParent.id
-            task.sortIndex = nextSortIndex(for: candidateParent.id, excluding: task.id)
-        }
-        synchronizeMindMapFromTasks()
-        persist(event: "task.indented", details: id.uuidString)
-        refreshPetState()
+        taskUseCases.indentTask(id: id)
     }
 
     func outdentTask(id: UUID) {
-        guard let task = task(id: id), let parentID = task.parentTaskID, let parent = self.task(id: parentID) else { return }
-        mutateTask(id: id) { mutableTask in
-            mutableTask.parentTaskID = parent.parentTaskID
-            mutableTask.sortIndex = nextSortIndex(for: parent.parentTaskID, excluding: mutableTask.id)
-        }
-        synchronizeMindMapFromTasks()
-        persist(event: "task.outdented", details: id.uuidString)
-        refreshPetState()
+        taskUseCases.outdentTask(id: id)
     }
 
     func archiveTask(id: UUID) {
-        mutateTask(id: id) { task in
-            task.status = .archived
-            task.isCurrent = false
-        }
-        clearBackgroundTask(id)
-        if snapshot.selectedTaskID == id {
-            snapshot.selectedTaskID = tasks.first(where: { $0.status != .archived && $0.id != id })?.id
-        }
-        synchronizeMindMapFromTasks()
-        persist(event: "task.archived", details: id.uuidString)
-        refreshPetState()
+        taskUseCases.archiveTask(id: id)
     }
 
     func applyTaskDraft(_ draft: TaskSnapshotDraft, to taskID: UUID) {
-        let normalizedUrgencyValue = PriorityVector.clampedPercentage(draft.urgencyValue)
-        let normalizedImportanceValue = PriorityVector.clampedPercentage(draft.importanceValue)
-        let normalizedUrgency = draft.quadrant == nil ? 0 : PriorityVector.score(from: normalizedUrgencyValue)
-        let normalizedImportance = draft.quadrant == nil ? 0 : PriorityVector.score(from: normalizedImportanceValue)
-        let smartEntries = draft.smartEntries.mergedWithDefaults()
-        let tags = draft.tagsText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        mutateTask(id: taskID) { task in
-            task.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            task.notes = draft.notes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            task.status = draft.status
-            task.priority = draft.quadrant == nil
-                ? 0
-                : PriorityVector.derivedPriority(
-                    urgencyValue: normalizedUrgencyValue,
-                    importanceValue: normalizedImportanceValue
-                )
-            task.urgencyScore = normalizedUrgency
-            task.importanceScore = normalizedImportance
-            task.urgencyValue = normalizedUrgencyValue
-            task.importanceValue = normalizedImportanceValue
-            task.quadrant = draft.quadrant
-            task.estimatedMinutes = max(0, draft.estimatedMinutes)
-            task.dueAt = draft.hasDueDate ? draft.dueAt : nil
-            task.smartEntries = smartEntries
-            task.tags = tags
-
-            let smart = SmartEvaluator.evaluate(
-                title: task.title,
-                notes: task.notes,
-                smartEntries: smartEntries,
-                dueAt: task.dueAt
-            )
-            task.smartSpecificMissing = smart.specificMissing
-            task.smartMeasurableMissing = smart.measurableMissing
-            task.smartActionableMissing = smart.actionableMissing
-            task.smartRelevantMissing = smart.relevantMissing
-            task.smartBoundedMissing = smart.boundedMissing
-
-            if task.status == .done, task.completedAt == nil {
-                task.completedAt = Date()
-            } else if task.status != .done {
-                task.completedAt = nil
-            }
-        }
-
-        synchronizeMindMapFromTasks()
-        persist(event: "task.updated", details: taskID.uuidString)
-        if priorityPromptTaskID == taskID {
-            priorityPromptTaskID = nil
-        }
-        refreshPetState()
+        taskUseCases.applyTaskDraft(draft, to: taskID)
     }
 
     func applyPrioritySelection(for taskID: UUID, urgencyValue: Double, importanceValue: Double) {
-        let normalizedUrgencyValue = PriorityVector.clampedPercentage(urgencyValue)
-        let normalizedImportanceValue = PriorityVector.clampedPercentage(importanceValue)
-
-        mutateTask(id: taskID) { task in
-            task.priority = PriorityVector.derivedPriority(
-                urgencyValue: normalizedUrgencyValue,
-                importanceValue: normalizedImportanceValue
-            )
-            task.urgencyScore = PriorityVector.score(from: normalizedUrgencyValue)
-            task.importanceScore = PriorityVector.score(from: normalizedImportanceValue)
-            task.urgencyValue = normalizedUrgencyValue
-            task.importanceValue = normalizedImportanceValue
-            task.quadrant = PriorityVector.quadrant(
-                urgencyValue: normalizedUrgencyValue,
-                importanceValue: normalizedImportanceValue
-            )
-        }
-
-        priorityPromptTaskID = nil
-        persist(event: "task.priority.selected", details: taskID.uuidString)
-        refreshPetState()
+        taskUseCases.applyPrioritySelection(for: taskID, urgencyValue: urgencyValue, importanceValue: importanceValue)
     }
 
     func dismissPriorityPrompt() {
@@ -463,411 +322,68 @@ final class AppModel: ObservableObject {
 
     @discardableResult
     func startCurrentTask(timerMode: TaskTimerMode = .countUp) -> UUID? {
-        guard let currentTask else { return nil }
-        return startTask(id: currentTask.id, timerMode: timerMode)
+        taskUseCases.startCurrentTask(timerMode: timerMode)
     }
 
     @discardableResult
     func startTask(id taskID: UUID, timerMode: TaskTimerMode = .countUp) -> UUID? {
-        guard let task = task(id: taskID) else { return nil }
-        if let activeTaskID {
-            pauseTask(id: activeTaskID)
-        }
-
-        let now = Date()
-        snapshot.tasks = snapshot.tasks.map { existingTask in
-            guard existingTask.id == taskID else { return existingTask }
-            var updated = existingTask
-            updated.status = .doing
-            updated.completedAt = nil
-            updated.updatedAt = now
-            return updated
-        }
-        setBackgroundState(for: taskID, enabled: false)
-
-        if timerMode != .untimed {
-            snapshot.sessions.insert(
-                Session(
-                    id: UUID(),
-                    taskID: taskID,
-                    startedAt: now,
-                    endedAt: nil,
-                    totalSeconds: 0,
-                    state: .active,
-                    interruptionCount: 0,
-                    timerMode: timerMode,
-                    countdownTargetSeconds: timerMode == .countdown ? countdownTargetSeconds(for: task) : nil
-                ),
-                at: 0
-            )
-            persist(
-                event: "session.started",
-                details: "\(task.title):\(timerMode.rawValue)"
-            )
-        } else {
-            persist(
-                event: "task.started.untimed",
-                details: task.title
-            )
-        }
-        refreshPetState()
-        return taskID
+        taskUseCases.startTask(id: taskID, timerMode: timerMode)
     }
 
     func pauseCurrentTask() {
-        guard let currentTask else { return }
-        pauseTask(id: currentTask.id)
+        taskUseCases.pauseCurrentTask()
     }
 
     func pauseTask(id taskID: UUID) {
-        guard let task = task(id: taskID) else { return }
-        guard task.status == .doing || activeTaskID == taskID else { return }
-        let now = Date()
-        if let activeSession, activeSession.taskID == taskID {
-            snapshot.sessions = snapshot.sessions.map { session in
-                guard session.id == activeSession.id else { return session }
-                var updated = session
-                updated.state = .paused
-                updated.endedAt = now
-                updated.totalSeconds = TaskService.liveSeconds(for: session, now: now)
-                return updated
-            }
-        }
-
-        snapshot.tasks = snapshot.tasks.map { existingTask in
-            guard existingTask.id == taskID else { return existingTask }
-            var updated = existingTask
-            updated.status = .paused
-            updated.updatedAt = now
-            return updated
-        }
-        clearBackgroundTask(taskID)
-
-        persist(event: "session.paused", details: task.id.uuidString)
-        refreshPetState()
+        taskUseCases.pauseTask(id: taskID)
     }
 
     func interruptCurrentTask(reason: String) {
-        guard let activeSession else { return }
-        let now = Date()
-        snapshot.interrupts.insert(
-            Interrupt(
-                id: UUID(),
-                sessionID: activeSession.id,
-                reason: reason.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                startedAt: now,
-                endedAt: now
-            ),
-            at: 0
-        )
-        snapshot.sessions = snapshot.sessions.map { session in
-            guard session.id == activeSession.id else { return session }
-            var updated = session
-            updated.interruptionCount += 1
-            return updated
-        }
-        pauseTask(id: activeSession.taskID)
-        persist(event: "session.interrupted", details: reason)
+        taskUseCases.interruptCurrentTask(reason: reason)
     }
 
     @discardableResult
     func completeCurrentTask(switchToTaskID preferredTaskID: UUID? = nil) -> UUID? {
-        guard let currentTask else { return nil }
-        return completeTask(id: currentTask.id, switchToTaskID: preferredTaskID)
+        taskUseCases.completeCurrentTask(switchToTaskID: preferredTaskID)
     }
 
     @discardableResult
     func completeTask(id taskID: UUID, switchToTaskID preferredTaskID: UUID? = nil) -> UUID? {
-        let now = Date()
-        stopActiveSessionIfNeeded(for: taskID, newState: .stopped, now: now)
-
-        let resolvedPreferredTaskID = preferredTaskID.flatMap { candidateID -> UUID? in
-            guard let candidateTask = task(id: candidateID) else { return nil }
-            guard candidateTask.id != taskID else { return nil }
-            guard candidateTask.status != .done && candidateTask.status != .archived else { return nil }
-            return candidateTask.id
-        }
-
-        let isSelectedTask = snapshot.selectedTaskID == taskID
-        let preferredRootTaskID = TaskService.rootAncestorID(for: taskID, in: snapshot)
-        let nextFocusTaskID = resolvedPreferredTaskID
-            ?? (isSelectedTask
-                ? TaskService.nextFocusableTask(
-                    after: taskID,
-                    preferringRootTaskID: preferredRootTaskID,
-                    in: snapshot
-                )?.id
-                : snapshot.selectedTaskID)
-
-        snapshot.tasks = snapshot.tasks.map { task in
-            guard task.id == taskID else {
-                guard isSelectedTask || resolvedPreferredTaskID != nil else { return task }
-                var updated = task
-                updated.isCurrent = task.id == nextFocusTaskID
-                return updated
-            }
-            var updated = task
-            updated.status = .done
-            updated.completedAt = now
-            updated.updatedAt = now
-            updated.isCurrent = false
-            return updated
-        }
-        // 归档所有直接子任务（父任务完成，子任务失去意义）
-        let childIDs = snapshot.tasks.filter { $0.parentTaskID == taskID && $0.status != .archived }.map(\.id)
-        if !childIDs.isEmpty {
-            snapshot.tasks = snapshot.tasks.map { task in
-                guard childIDs.contains(task.id) else { return task }
-                var updated = task
-                updated.status = .archived
-                updated.isCurrent = false
-                updated.updatedAt = now
-                return updated
-            }
-        }
-
-        clearBackgroundTask(taskID)
-        if isSelectedTask || resolvedPreferredTaskID != nil {
-            snapshot.selectedTaskID = nextFocusTaskID
-        }
-        snapshot.lastCelebrationAt = now
-        synchronizeMindMapFromTasks()
-        persist(event: "task.completed", details: taskID.uuidString)
-        refreshPetState()
-        return nextFocusTaskID
+        taskUseCases.completeTask(id: taskID, switchToTaskID: preferredTaskID)
     }
 
     @discardableResult
     func moveCurrentTaskToBackground() -> UUID? {
-        guard let currentTask else { return nil }
-        return moveTaskToBackground(id: currentTask.id)
+        taskUseCases.moveCurrentTaskToBackground()
     }
 
     @discardableResult
     func moveTaskToBackground(id taskID: UUID) -> UUID? {
-        guard let task = task(id: taskID) else { return nil }
-
-        let now = Date()
-        stopActiveSessionIfNeeded(for: taskID, newState: .stopped, now: now)
-
-        snapshot.tasks = snapshot.tasks.map { existingTask in
-            guard existingTask.id == taskID else { return existingTask }
-            var updated = existingTask
-            updated.status = .doing
-            updated.completedAt = nil
-            updated.updatedAt = now
-            return updated
-        }
-        setBackgroundState(for: taskID, enabled: true)
-
-        let isSelectedTask = snapshot.selectedTaskID == taskID
-        let preferredRootTaskID = TaskService.rootAncestorID(for: taskID, in: snapshot)
-        let nextFocusTaskID = isSelectedTask
-            ? TaskService.nextFocusableTask(
-                after: taskID,
-                preferringRootTaskID: preferredRootTaskID,
-                in: snapshot
-            )?.id
-            : snapshot.selectedTaskID
-
-        if isSelectedTask, let nextFocusTaskID, nextFocusTaskID != taskID {
-            snapshot.selectedTaskID = nextFocusTaskID
-            snapshot.tasks = snapshot.tasks.map { existingTask in
-                var updated = existingTask
-                updated.isCurrent = existingTask.id == nextFocusTaskID
-                return updated
-            }
-        }
-
-        persist(event: "task.backgrounded", details: task.title)
-        refreshPetState()
-        return nextFocusTaskID ?? snapshot.selectedTaskID
+        taskUseCases.moveTaskToBackground(id: taskID)
     }
 
     func createDraftFromImportText(sourceType: ImportSourceType = .text) async {
-        let trimmed = importText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            importErrorMessage = "先输入一些要导入的内容。"
-            return
-        }
-
-        isImportParsing = true
-        importErrorMessage = nil
-        defer { isImportParsing = false }
-
-        let result = await ImportParser.parse(rawText: trimmed, sourceType: sourceType)
-        snapshot.importDrafts.append(result.draft)
-        snapshot.importDraftItems.removeAll { $0.draftID == result.draft.id }
-        snapshot.importDraftItems.append(contentsOf: result.items)
-        importRuntimeNote = "Vikunja + Duckling + Reminders 已生成 \(result.items.count) 个候选块"
-        persist(event: "import.parsed", details: "\(sourceType.rawValue):\(result.items.count) items")
-        refreshPetState()
+        await importUseCases.createDraftFromImportText(sourceType: sourceType)
     }
 
     func transcribeAudioImport(from url: URL) async {
-        isAudioTranscribing = true
-        importErrorMessage = nil
-        defer { isAudioTranscribing = false }
-
-        do {
-            let transcript = try await WhisperTranscriber.shared.transcribe(audioFileURL: url)
-            importText = transcript
-            importRuntimeNote = "Whisper 已转写 \(url.lastPathComponent)"
-            await createDraftFromImportText(sourceType: .voice)
-        } catch {
-            importErrorMessage = error.localizedDescription
-        }
+        await importUseCases.transcribeAudioImport(from: url)
     }
 
     func updateDraftItemTitle(id: UUID, title: String) {
-        mutateDraftItem(id: id) { updated in
-            updated.proposedTitle = title
-            updated.smartEntries = SmartEvaluator.seededEntries(
-                title: title,
-                notes: updated.proposedNotes,
-                dueAt: updated.proposedDueAt,
-                existingEntries: updated.smartEntries
-            )
-            let smart = SmartEvaluator.evaluate(
-                title: title,
-                notes: updated.proposedNotes,
-                smartEntries: updated.smartEntries,
-                dueAt: updated.proposedDueAt
-            )
-            updated.smartHints = smart.hints
-        }
-        persist(event: "import.item.updated", details: id.uuidString)
+        importUseCases.updateDraftItemTitle(id: id, title: title)
     }
 
     func applyDraftItemDraft(_ draft: DraftItemSnapshotDraft, to draftItemID: UUID) {
-        let urgencyValue = PriorityVector.clampedPercentage(draft.urgencyValue)
-        let importanceValue = PriorityVector.clampedPercentage(draft.importanceValue)
-        let urgency = PriorityVector.score(from: urgencyValue)
-        let importance = PriorityVector.score(from: importanceValue)
-        let smartEntries = draft.smartEntries.mergedWithDefaults()
-        let tags = draft.tagsText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        mutateDraftItem(id: draftItemID) { item in
-            item.proposedTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            item.proposedNotes = draft.notes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            item.proposedPriority = PriorityVector.derivedPriority(
-                urgencyValue: urgencyValue,
-                importanceValue: importanceValue
-            )
-            item.proposedUrgencyScore = urgency
-            item.proposedImportanceScore = importance
-            item.proposedUrgencyValue = urgencyValue
-            item.proposedImportanceValue = importanceValue
-            item.proposedQuadrant = PriorityVector.quadrant(
-                urgencyValue: urgencyValue,
-                importanceValue: importanceValue
-            )
-            item.proposedDueAt = draft.hasDueDate ? draft.dueAt : nil
-            item.proposedTags = tags
-            item.smartEntries = smartEntries
-            item.isAccepted = draft.isAccepted
-
-            let smart = SmartEvaluator.evaluate(
-                title: item.proposedTitle,
-                notes: item.proposedNotes,
-                smartEntries: smartEntries,
-                dueAt: item.proposedDueAt
-            )
-            item.smartHints = smart.hints
-        }
-        persist(event: "import.item.updated", details: draftItemID.uuidString)
+        importUseCases.applyDraftItemDraft(draft, to: draftItemID)
     }
 
     func toggleDraftItemAccepted(id: UUID) {
-        mutateDraftItem(id: id) { item in
-            item.isAccepted.toggle()
-        }
-        persist(event: "import.item.toggled", details: id.uuidString)
+        importUseCases.toggleDraftItemAccepted(id: id)
     }
 
     func commitLatestDraft() {
-        guard let latestDraft else { return }
-        let acceptedItems = latestDraftItems.filter(\.isAccepted)
-        guard !acceptedItems.isEmpty else { return }
-
-        var createdTaskIDsByDraftItemID: [UUID: UUID] = [:]
-        var projectIDsByName: [String: UUID] = [:]
-        let now = Date()
-
-        for item in acceptedItems {
-            let smartEntries = item.smartEntries.mergedWithDefaults()
-            let smart = SmartEvaluator.evaluate(
-                title: item.proposedTitle,
-                notes: item.proposedNotes,
-                smartEntries: smartEntries,
-                dueAt: item.proposedDueAt
-            )
-            let projectID = ensureProjectID(
-                named: item.proposedProjectName,
-                cache: &projectIDsByName,
-                now: now
-            )
-            let task = Task(
-                id: UUID(),
-                projectID: projectID,
-                parentTaskID: item.parentItemID.flatMap { createdTaskIDsByDraftItemID[$0] },
-                sortIndex: item.sortIndex,
-                title: item.proposedTitle,
-                notes: item.proposedNotes,
-                status: .todo,
-                priority: item.proposedPriority ?? PriorityVector.derivedPriority(
-                    urgencyValue: item.proposedUrgencyValue ?? PriorityVector.value(from: item.proposedUrgencyScore ?? 1),
-                    importanceValue: item.proposedImportanceValue ?? PriorityVector.value(from: item.proposedImportanceScore ?? 1)
-                ),
-                urgencyScore: item.proposedUrgencyScore ?? 1,
-                importanceScore: item.proposedImportanceScore ?? 1,
-                urgencyValue: item.proposedUrgencyValue ?? PriorityVector.value(from: item.proposedUrgencyScore ?? 1),
-                importanceValue: item.proposedImportanceValue ?? PriorityVector.value(from: item.proposedImportanceScore ?? 1),
-                quadrant: item.proposedQuadrant ?? PriorityVector.quadrant(
-                    urgencyValue: item.proposedUrgencyValue ?? PriorityVector.value(from: item.proposedUrgencyScore ?? 1),
-                    importanceValue: item.proposedImportanceValue ?? PriorityVector.value(from: item.proposedImportanceScore ?? 1)
-                ),
-                estimatedMinutes: nil,
-                dueAt: item.proposedDueAt,
-                smartSpecificMissing: smart.specificMissing,
-                smartMeasurableMissing: smart.measurableMissing,
-                smartActionableMissing: smart.actionableMissing,
-                smartRelevantMissing: smart.relevantMissing,
-                smartBoundedMissing: smart.boundedMissing,
-                smartEntries: smartEntries,
-                tags: item.proposedTags,
-                isCurrent: false,
-                createdAt: now,
-                updatedAt: now,
-                completedAt: nil
-            )
-            createdTaskIDsByDraftItemID[item.id] = task.id
-            snapshot.tasks.append(task)
-        }
-
-        let remindersItems = acceptedItems
-        _Concurrency.Task { @MainActor [appleRemindersBridge] in
-            await appleRemindersBridge.mirrorImportedItems(remindersItems)
-        }
-
-        snapshot.importDrafts = snapshot.importDrafts.map { draft in
-            guard draft.id == latestDraft.id else { return draft }
-            var updated = draft
-            updated.parseStatus = .accepted
-            updated.updatedAt = Date()
-            return updated
-        }
-
-        if snapshot.selectedTaskID == nil, let firstTaskID = createdTaskIDsByDraftItemID.values.first {
-            snapshot.selectedTaskID = firstTaskID
-        }
-        synchronizeMindMapFromTasks()
-        importRuntimeNote = "已导入 \(acceptedItems.count) 条任务，并同步到 Apple Reminders"
-        persist(event: "import.accepted", details: latestDraft.id.uuidString)
-        refreshPetState()
+        importUseCases.commitLatestDraft()
     }
 
     func updateMindMapDocument(
@@ -876,27 +392,12 @@ final class AppModel: ObservableObject {
         localConfigJSON: String? = nil,
         language: String? = nil
     ) {
-        var didChange = false
-
-        if let dataJSON {
-            didChange = applyMindMapDataChange(dataJSON) || didChange
-        }
-        if let configJSON, snapshot.mindMapDocument.configJSON != configJSON {
-            snapshot.mindMapDocument.configJSON = configJSON
-            didChange = true
-        }
-        if let localConfigJSON, snapshot.mindMapDocument.localConfigJSON != localConfigJSON {
-            snapshot.mindMapDocument.localConfigJSON = localConfigJSON
-            didChange = true
-        }
-        if let language, snapshot.mindMapDocument.language != language {
-            snapshot.mindMapDocument.language = language
-            didChange = true
-        }
-
-        guard didChange else { return }
-        snapshot.mindMapDocument.updatedAt = Date()
-        persist(event: "mind_map.updated", details: snapshot.mindMapDocument.updatedAt.ISO8601Format())
+        syncUseCases.updateMindMapDocument(
+            dataJSON: dataJSON,
+            configJSON: configJSON,
+            localConfigJSON: localConfigJSON,
+            language: language
+        )
     }
 
     func setPetHovering(_ hovering: Bool) {
@@ -931,173 +432,6 @@ final class AppModel: ObservableObject {
         refreshPetState()
     }
 
-    private func pauseLeavingTaskIfNeeded(_ taskID: UUID?) {
-        guard let taskID else { return }
-        guard !isBackgroundTask(taskID) else { return }
-        guard let leavingTask = task(id: taskID) else { return }
-        guard leavingTask.status == .doing || activeTaskID == taskID else { return }
-        pauseTask(id: taskID)
-    }
-
-    private func stopActiveSessionIfNeeded(for taskID: UUID, newState: SessionState, now: Date) {
-        guard let activeSession, activeSession.taskID == taskID else { return }
-        snapshot.sessions = snapshot.sessions.map { session in
-            guard session.id == activeSession.id else { return session }
-            var updated = session
-            updated.state = newState
-            updated.endedAt = now
-            updated.totalSeconds = TaskService.liveSeconds(for: session, now: now)
-            return updated
-        }
-    }
-
-    private func setBackgroundState(for taskID: UUID, enabled: Bool) {
-        var ids = snapshot.preferences.backgroundTaskIDs.filter { UUID(uuidString: $0) != nil }
-        let serializedID = taskID.uuidString
-        if enabled {
-            if !ids.contains(serializedID) {
-                ids.append(serializedID)
-            }
-        } else {
-            ids.removeAll { $0 == serializedID }
-        }
-        snapshot.preferences.backgroundTaskIDs = ids
-    }
-
-    private func clearBackgroundTask(_ taskID: UUID) {
-        setBackgroundState(for: taskID, enabled: false)
-    }
-
-    private func nextSortIndex(for parentTaskID: UUID?, excluding taskID: UUID? = nil) -> Int {
-        let siblings = snapshot.tasks.filter {
-            $0.parentTaskID == parentTaskID &&
-            $0.id != taskID &&
-            $0.status != .archived
-        }
-        return (siblings.map(\.sortIndex).max() ?? -1) + 1
-    }
-
-    private func reconcileMindMapAndTasksOnRestore() -> Bool {
-        guard !snapshot.tasks.isEmpty else {
-            return synchronizeMindMapFromTasks(force: true)
-        }
-
-        let visibleTasks = snapshot.tasks.filter { $0.status != .archived }
-        if !visibleTasks.isEmpty,
-           MindMapTaskSynchronizer.isEffectivelyEmpty(snapshot.mindMapDocument.dataJSON) {
-            return synchronizeMindMapFromTasks(force: true)
-        }
-
-        let latestTaskUpdate = snapshot.tasks.map(\.updatedAt).max() ?? .distantPast
-        if snapshot.mindMapDocument.dataJSON == AppSnapshot.empty.mindMapDocument.dataJSON {
-            return synchronizeMindMapFromTasks(force: true)
-        }
-
-        if snapshot.mindMapDocument.updatedAt >= latestTaskUpdate {
-            let didChange = applyMindMapDataChange(snapshot.mindMapDocument.dataJSON)
-            if didChange {
-                snapshot.mindMapDocument.updatedAt = max(snapshot.mindMapDocument.updatedAt, Date())
-            }
-            return didChange
-        }
-
-        return synchronizeMindMapFromTasks(force: true)
-    }
-
-    @discardableResult
-    private func applyMindMapDataChange(_ dataJSON: String) -> Bool {
-        guard let syncResult = MindMapTaskSynchronizer.syncTasks(from: dataJSON, existingTasks: snapshot.tasks) else {
-            guard snapshot.mindMapDocument.dataJSON != dataJSON else { return false }
-            snapshot.mindMapDocument.dataJSON = dataJSON
-            return true
-        }
-
-        var didChange = false
-
-        if snapshot.tasks != syncResult.tasks {
-            snapshot.tasks = syncResult.tasks
-            didChange = true
-        }
-        if snapshot.mindMapDocument.dataJSON != syncResult.normalizedDataJSON {
-            snapshot.mindMapDocument.dataJSON = syncResult.normalizedDataJSON
-            didChange = true
-        }
-
-        guard didChange else { return false }
-
-        normalizeSelectedTaskAfterMindMapSync()
-        pruneBackgroundTasksAfterMindMapSync()
-        stopSessionsForArchivedTasksAfterMindMapSync()
-
-        // 脑图新建的任务弹出四象限选择，和列表建任务流程一致
-        if let firstNewTaskID = syncResult.newTaskIDs.first {
-            priorityPromptTaskID = firstNewTaskID
-            snapshot.selectedTaskID = firstNewTaskID
-        }
-
-        return true
-    }
-
-    @discardableResult
-    private func synchronizeMindMapFromTasks(force: Bool = false) -> Bool {
-        let nextDataJSON = MindMapTaskSynchronizer.makeMindMapDataJSON(
-            from: snapshot.tasks,
-            existingDataJSON: snapshot.mindMapDocument.dataJSON
-        )
-        guard force || snapshot.mindMapDocument.dataJSON != nextDataJSON else { return false }
-        snapshot.mindMapDocument.dataJSON = nextDataJSON
-        snapshot.mindMapDocument.updatedAt = Date()
-        return true
-    }
-
-    private func normalizeSelectedTaskAfterMindMapSync() {
-        let visibleTasks = snapshot.tasks.filter { $0.status != .archived }
-        let visibleTaskIDs = Set(visibleTasks.map(\.id))
-        let fallbackSelectedTaskID = visibleTasks.sorted { lhs, rhs in
-            if (lhs.parentTaskID == nil) != (rhs.parentTaskID == nil) {
-                return lhs.parentTaskID == nil
-            }
-            if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
-            return lhs.createdAt < rhs.createdAt
-        }.first?.id
-        let selectedTaskID = snapshot.selectedTaskID.flatMap { visibleTaskIDs.contains($0) ? $0 : nil }
-            ?? fallbackSelectedTaskID
-
-        snapshot.selectedTaskID = selectedTaskID
-        snapshot.tasks = snapshot.tasks.map { task in
-            var updated = task
-            updated.isCurrent = task.id == selectedTaskID
-            return updated
-        }
-    }
-
-    private func pruneBackgroundTasksAfterMindMapSync() {
-        let validTaskIDs = Set(snapshot.tasks.filter { $0.status != .archived }.map(\.id.uuidString))
-        snapshot.preferences.backgroundTaskIDs = snapshot.preferences.backgroundTaskIDs.filter { validTaskIDs.contains($0) }
-    }
-
-    private func stopSessionsForArchivedTasksAfterMindMapSync() {
-        let now = Date()
-        let archivedTaskIDs = Set(snapshot.tasks.filter { $0.status == .archived }.map(\.id))
-        guard !archivedTaskIDs.isEmpty else { return }
-
-        snapshot.sessions = snapshot.sessions.map { session in
-            guard archivedTaskIDs.contains(session.taskID),
-                  session.endedAt == nil else {
-                return session
-            }
-            var updated = session
-            updated.state = .paused
-            updated.endedAt = now
-            updated.totalSeconds = TaskService.liveSeconds(for: session, now: now)
-            return updated
-        }
-    }
-
-    private func countdownTargetSeconds(for task: Task) -> Int {
-        max(task.estimatedMinutes ?? 25, 1) * 60
-    }
-
     private func refreshPetState(shouldPersist: Bool = true) {
         petState = PetStateMachine.resolve(
             snapshot: snapshot,
@@ -1109,68 +443,61 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func mutateTask(id: UUID, _ mutate: (inout Task) -> Void) {
-        let now = Date()
-        snapshot.tasks = snapshot.tasks.map { task in
-            guard task.id == id else { return task }
-            var updated = task
-            mutate(&updated)
-            updated.updatedAt = now
-            return updated
-        }
-    }
-
-    private func mutateDraftItem(id: UUID, _ mutate: (inout ImportDraftItem) -> Void) {
-        snapshot.importDraftItems = snapshot.importDraftItems.map { item in
-            guard item.id == id else { return item }
-            var updated = item
-            mutate(&updated)
-            return updated
-        }
-    }
-
-    private func ensureProjectID(
-        named projectName: String?,
-        cache: inout [String: UUID],
-        now: Date
-    ) -> UUID? {
-        guard let normalized = projectName?.trimmingCharacters(in: .whitespacesAndNewlines), !normalized.isEmpty else {
-            return nil
-        }
-
-        let key = normalized.lowercased()
-        if let cached = cache[key] {
-            return cached
-        }
-        if let existing = snapshot.projects.first(where: { $0.name.caseInsensitiveCompare(normalized) == .orderedSame }) {
-            cache[key] = existing.id
-            return existing.id
-        }
-
-        let project = Project(
-            id: UUID(),
-            name: normalized,
-            notes: nil,
-            createdAt: now,
-            updatedAt: now
+    private func withMutableTaskUseCasesState(_ mutate: (inout TaskUseCases.State) -> Void) {
+        var state = TaskUseCases.State(
+            snapshot: snapshot,
+            priorityPromptTaskID: priorityPromptTaskID
         )
-        snapshot.projects.append(project)
-        cache[key] = project.id
-        return project.id
+        mutate(&state)
+        snapshot = state.snapshot
+        priorityPromptTaskID = state.priorityPromptTaskID
+    }
+
+    private func withMutableImportUseCasesState(_ mutate: (inout ImportUseCases.State) -> Void) {
+        var state = ImportUseCases.State(
+            snapshot: snapshot,
+            importText: importText,
+            isImportParsing: isImportParsing,
+            isAudioTranscribing: isAudioTranscribing,
+            importErrorMessage: importErrorMessage,
+            importRuntimeNote: importRuntimeNote
+        )
+        mutate(&state)
+        snapshot = state.snapshot
+        importText = state.importText
+        isImportParsing = state.isImportParsing
+        isAudioTranscribing = state.isAudioTranscribing
+        importErrorMessage = state.importErrorMessage
+        importRuntimeNote = state.importRuntimeNote
+    }
+
+    private func withMutableSyncUseCasesState(_ mutate: (inout SyncUseCases.State) -> Void) {
+        var state = SyncUseCases.State(
+            snapshot: snapshot,
+            priorityPromptTaskID: priorityPromptTaskID
+        )
+        mutate(&state)
+        snapshot = state.snapshot
+        priorityPromptTaskID = state.priorityPromptTaskID
     }
 
     private func persist(event: String, details: String) {
         scheduleSave()
-        _Concurrency.Task {
+        let repository = repository
+        _Concurrency.Task(priority: .utility) {
             await repository.appendEvent(event, details: details)
         }
     }
 
     private func scheduleSave() {
         let snapshot = snapshot
+        let repository = repository
+        saveGeneration += 1
+        let generation = saveGeneration
         saveTask?.cancel()
-        saveTask = _Concurrency.Task {
-            await repository.saveSnapshot(snapshot)
+        saveTask = _Concurrency.Task(priority: .utility) {
+            guard !_Concurrency.Task.isCancelled else { return }
+            await repository.saveSnapshot(snapshot, generation: generation)
         }
     }
 
@@ -1182,19 +509,15 @@ final class AppModel: ObservableObject {
                 if self.activeSession != nil {
                     self.objectWillChange.send()
                 }
-                self.petState = PetStateMachine.resolve(
+                let nextPetState = PetStateMachine.resolve(
                     snapshot: self.snapshot,
                     isHovering: self.isPetHovering,
                     lastExternalInputAt: self.lastExternalInputAt
                 )
+                if self.petState != nextPetState {
+                    self.petState = nextPetState
+                }
             }
         }
-    }
-
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        isEmpty ? nil : self
     }
 }
