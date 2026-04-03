@@ -77,6 +77,29 @@ final class MindMapTaskSynchronizerTests: XCTestCase {
         XCTAssertEqual(((childNodes.first?["data"] as? [String: Any])?["taskId"] as? String), childID.uuidString)
     }
 
+    func testHasStableTaskIDsReturnsTrueWhenAllNodesCarryUUIDs() {
+        let parentID = UUID()
+        let childID = UUID()
+
+        let hasStableIDs = MindMapTaskSynchronizer.hasStableTaskIDs(
+            in: """
+            {"root":{"data":{"text":"任务树"},"children":[{"data":{"text":"父任务","taskId":"\(parentID.uuidString)"},"children":[{"data":{"text":"子任务","uid":"\(childID.uuidString)"}}]}]}}
+            """
+        )
+
+        XCTAssertTrue(hasStableIDs)
+    }
+
+    func testHasStableTaskIDsReturnsFalseWhenNodeIsMissingUUID() {
+        let hasStableIDs = MindMapTaskSynchronizer.hasStableTaskIDs(
+            in: """
+            {"root":{"data":{"text":"任务树"},"children":[{"data":{"text":"父任务"},"children":[{"data":{"text":"子任务","uid":"temporary-node-id"}}]}]}}
+            """
+        )
+        
+        XCTAssertFalse(hasStableIDs)
+    }
+
     private func makeTask(
         id: UUID,
         parentTaskID: UUID? = nil,

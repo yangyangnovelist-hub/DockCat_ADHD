@@ -148,6 +148,27 @@ enum MindMapTaskSynchronizer {
         return children.isEmpty
     }
 
+    static func hasStableTaskIDs(in dataJSON: String) -> Bool {
+        guard let payload = jsonObject(from: dataJSON),
+              let root = payload["root"] as? [String: Any] else {
+            return false
+        }
+
+        func nodeHasStableTaskID(_ node: [String: Any]) -> Bool {
+            let data = node["data"] as? [String: Any] ?? [:]
+            let hasValidID = [data["taskId"], data["taskID"], data["uid"]]
+                .compactMap { $0 as? String }
+                .contains { UUID(uuidString: $0) != nil }
+            guard hasValidID else { return false }
+
+            let children = (node["children"] as? [[String: Any]]) ?? []
+            return children.allSatisfy(nodeHasStableTaskID)
+        }
+
+        let rootChildren = (root["children"] as? [[String: Any]]) ?? []
+        return rootChildren.allSatisfy(nodeHasStableTaskID)
+    }
+
     private static func makeSyncedTask(
         existingTask: Task?,
         id: UUID,

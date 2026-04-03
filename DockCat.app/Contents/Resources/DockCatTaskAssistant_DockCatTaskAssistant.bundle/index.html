@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1,maximum-scale=1,minimum-scale=1">
+  <link rel="icon" href="dist/logo.ico">
+  <title>Dock Cat Mind Map</title>
+  <script>
+    window.externalPublicPath = './dist/';
+    window.takeOverApp = true;
+
+    const defaultMindMapData = {
+      root: {
+        data: { text: '我的脑图' },
+        children: []
+      },
+      theme: {
+        template: 'default',
+        config: {}
+      },
+      layout: 'mindMap',
+      config: {},
+      view: null
+    };
+
+    const defaultState = {
+      mindMapData: defaultMindMapData,
+      mindMapConfig: {},
+      lang: 'zh',
+      localConfig: null
+    };
+
+    window.codexMindMapState = window.codexMindMapState || defaultState;
+    window.codexMindMapAppReady = false;
+    window.codexMindMapHydrating = false;
+
+    window.codexApplyMindMapState = nextState => {
+      window.codexMindMapState = {
+        ...window.codexMindMapState,
+        ...nextState
+      };
+
+      if (window.codexMindMapAppReady && window.$bus && nextState.mindMapData) {
+        window.codexMindMapHydrating = true;
+        window.$bus.$emit('setData', nextState.mindMapData);
+        setTimeout(() => {
+          window.codexMindMapHydrating = false;
+        }, 0);
+      }
+    };
+
+    window.takeOverAppMethods = {
+      getMindMapData() {
+        return window.codexMindMapState.mindMapData || defaultMindMapData;
+      },
+      saveMindMapData(data) {
+        window.codexMindMapState.mindMapData = data;
+        if (window.codexMindMapHydrating) {
+          return;
+        }
+        window.webkit.messageHandlers.mindMapBridge.postMessage({
+          type: 'mindMapData',
+          payload: data
+        });
+      },
+      getMindMapConfig() {
+        return window.codexMindMapState.mindMapConfig || {};
+      },
+      saveMindMapConfig(config) {
+        window.codexMindMapState.mindMapConfig = config;
+        window.webkit.messageHandlers.mindMapBridge.postMessage({
+          type: 'mindMapConfig',
+          payload: config
+        });
+      },
+      getLanguage() {
+        return window.codexMindMapState.lang || 'zh';
+      },
+      saveLanguage(lang) {
+        window.codexMindMapState.lang = lang;
+        window.webkit.messageHandlers.mindMapBridge.postMessage({
+          type: 'language',
+          payload: lang
+        });
+      },
+      getLocalConfig() {
+        return window.codexMindMapState.localConfig || null;
+      },
+      saveLocalConfig(config) {
+        window.codexMindMapState.localConfig = config;
+        window.webkit.messageHandlers.mindMapBridge.postMessage({
+          type: 'localConfig',
+          payload: config
+        });
+      }
+    };
+
+    window.onload = () => {
+      window.$bus.$on('app_inited', () => {
+        window.codexMindMapAppReady = true;
+        window.codexApplyMindMapState({
+          mindMapData: window.codexMindMapState.mindMapData
+        });
+        window.webkit.messageHandlers.mindMapBridge.postMessage({
+          type: 'appInited'
+        });
+      });
+      window.initApp();
+    };
+  </script>
+  <link href="dist/css/chunk-vendors.css" rel="stylesheet">
+  <link href="dist/css/app.css" rel="stylesheet">
+</head>
+<body>
+  <noscript>
+    <strong>Dock Cat Mind Map requires JavaScript to run.</strong>
+  </noscript>
+  <div id="app"></div>
+  <script src="dist/js/chunk-vendors.js"></script>
+  <script src="dist/js/app.js"></script>
+</body>
+</html>

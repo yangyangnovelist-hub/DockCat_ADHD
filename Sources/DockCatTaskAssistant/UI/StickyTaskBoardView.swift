@@ -16,7 +16,7 @@ struct StickyTaskBoardView: View {
     @State private var pressedTaskID: UUID?
     @State private var quickTaskTitle = ""
     @State private var showingCompletedSubtasks = false
-    @State private var isSubtaskSectionExpanded = false
+    @State private var isSubtaskSectionExpanded = true
     @State private var completionSwitchDropIsTargeted = false
     @State private var rootSwitchPromptTaskID: UUID?
     @State private var draft = TaskSnapshotDraft(
@@ -40,14 +40,6 @@ struct StickyTaskBoardView: View {
             guard $0.status != .archived else { return false }
             return showingCompletedSubtasks ? $0.status == .done : $0.status != .done
         }
-    }
-
-    private var primarySubtask: Task? {
-        filteredSubtasks.first
-    }
-
-    private var additionalSubtasks: [Task] {
-        Array(filteredSubtasks.dropFirst())
     }
 
     private var otherRootTasks: [Task] {
@@ -324,8 +316,8 @@ struct StickyTaskBoardView: View {
 
                 Spacer()
 
-                if !additionalSubtasks.isEmpty {
-                    Text("还有 \(additionalSubtasks.count) 个")
+                if !filteredSubtasks.isEmpty {
+                    Text("\(filteredSubtasks.count) 个")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.black.opacity(0.46))
                 }
@@ -342,22 +334,20 @@ struct StickyTaskBoardView: View {
                 }
             }
 
-            if let primarySubtask {
-                primaryTaskRow(primarySubtask)
-                if isSubtaskSectionExpanded, !additionalSubtasks.isEmpty {
+            if isSubtaskSectionExpanded {
+                if filteredSubtasks.isEmpty {
+                    Text(showingCompletedSubtasks ? "当前任务还没有已完成子任务。" : "当前任务还没有未完成子任务。")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.black.opacity(0.52))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 10)
+                } else {
                     VStack(alignment: .leading, spacing: 10) {
-                        ForEach(additionalSubtasks) { task in
+                        ForEach(filteredSubtasks) { task in
                             primaryTaskRow(task)
                         }
                     }
-                    .padding(.leading, 16)
                 }
-            } else {
-                Text(showingCompletedSubtasks ? "当前任务还没有已完成子任务。" : "当前任务还没有未完成子任务。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.black.opacity(0.52))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 10)
             }
         }
     }
