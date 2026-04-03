@@ -46,5 +46,9 @@ let package = Package(
                 .copy("Resources/MindMapApp"),
             ]
         ),
+        .testTarget(
+            name: "DockCatTaskAssistantTests",
+            dependencies: ["DockCatTaskAssistant"]
+        ),
     ]
 )

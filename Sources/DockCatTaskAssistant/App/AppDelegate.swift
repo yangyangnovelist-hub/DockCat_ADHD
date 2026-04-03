@@ -89,7 +89,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 let anchorFrame = (notification.userInfo?[OnScreenNotificationUserInfoKey.windowFrame] as? NSValue)?.rectValue
                 let clickCount = notification.userInfo?[OnScreenNotificationUserInfoKey.clickCount] as? Int ?? 1
-                if clickCount >= 2 {
+                let isLongPress = notification.userInfo?[OnScreenNotificationUserInfoKey.isLongPress] as? Bool ?? false
+                
+                if isLongPress {
+                    self.pendingPetPrimaryClick?.cancel()
+                    self.pendingPetPrimaryClick = nil
+                    // Long press action: toggle pet visibility or low distraction
+                    self.appModel.toggleLowDistractionMode()
+                } else if clickCount >= 2 {
                     self.pendingPetPrimaryClick?.cancel()
                     self.pendingPetPrimaryClick = nil
                     self.showDashboard()
@@ -117,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         pendingPetPrimaryClick = workItem
-        let singleClickDelay = min(max(NSEvent.doubleClickInterval * 0.38, 0.1), 0.16)
+        let singleClickDelay = 0.12 // Fixed faster response
         DispatchQueue.main.asyncAfter(deadline: .now() + singleClickDelay, execute: workItem)
     }
 
