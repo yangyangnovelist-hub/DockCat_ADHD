@@ -34,7 +34,8 @@ final class PetWindowController: NSWindowController {
 
     func updatePosition(animated: Bool) {
         _ = animated
-        render(forceRestart: true)
+        let didChange = settings.apply(snapshot: appModel.snapshot, petState: appModel.petState)
+        render(forceRestart: didChange || !isVisible)
     }
 
     deinit {
@@ -66,15 +67,17 @@ final class PetWindowController: NSWindowController {
 }
 
 private final class DockCatOnScreenSettings: @MainActor OnScreenSettings {
-    var gravityEnabled: Bool = true
+    var gravityEnabled: Bool = false
     var petSize: CGFloat = 75
     var speedMultiplier: CGFloat = 1
+    var animationFPS: TimeInterval = 0
     var desktopInteractions: Bool = false
     var selectedPets: [String] = ["cat"]
     var ufoAbductionSchedule: String = ""
     var spawnEdge: OnScreenSpawnEdge = .right
     var preferredVerticalRatio: CGFloat = 0.24
     private var signature = Signature(
+        gravityEnabled: false,
         petSize: 75,
         desktopInteractions: false,
         selectedPets: ["cat"],
@@ -88,6 +91,7 @@ private final class DockCatOnScreenSettings: @MainActor OnScreenSettings {
         let verticalRatio = CGFloat(min(max(snapshot.preferences.petOffsetY / screenHeight, 0.14), 0.82))
         let edge: OnScreenSpawnEdge = snapshot.preferences.petEdge == .left ? .left : .right
         let nextSignature = Signature(
+            gravityEnabled: false,
             petSize: snapshot.preferences.lowDistractionMode ? 82 : 98,
             desktopInteractions: !snapshot.preferences.lowDistractionMode,
             selectedPets: species(for: petState),
@@ -95,8 +99,10 @@ private final class DockCatOnScreenSettings: @MainActor OnScreenSettings {
             preferredVerticalRatio: verticalRatio
         )
 
+        gravityEnabled = nextSignature.gravityEnabled
         petSize = nextSignature.petSize
         speedMultiplier = speed(for: petState)
+        animationFPS = speedMultiplier == 0 ? 0 : 8
         desktopInteractions = nextSignature.desktopInteractions
         selectedPets = nextSignature.selectedPets
         spawnEdge = nextSignature.spawnEdge
@@ -135,6 +141,7 @@ private final class DockCatOnScreenSettings: @MainActor OnScreenSettings {
 
 private extension DockCatOnScreenSettings {
     struct Signature: Equatable {
+        var gravityEnabled: Bool
         var petSize: CGFloat
         var desktopInteractions: Bool
         var selectedPets: [String]
