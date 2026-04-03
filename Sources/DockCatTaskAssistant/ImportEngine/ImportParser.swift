@@ -3,17 +3,127 @@ import EventKit
 import RemindersMenubarBridge
 import VikunjaQuickAddBridge
 
+struct ImportParseResult {
+    var draft: ImportDraft
+    var items: [ImportDraftItem]
+    var runtimeNote: String
+    var errorMessage: String?
+}
+
 @MainActor
 enum ImportParser {
     static func parse(
         rawText: String,
-        sourceType: ImportSourceType = .text
-    ) async -> (draft: ImportDraft, items: [ImportDraftItem]) {
+        sourceType: ImportSourceType = .text,
+        analysisPreference: ImportAnalysisPreference = .disabled
+    ) async -> ImportParseResult {
         let now = Date()
         let draftID = UUID()
         let normalizedInput = normalizeLegacyStructure(in: rawText)
-        let quickAddLines = VikunjaQuickAdd.parseMultiline(normalizedInput)
 
+        if analysisPreference.isEnabled {
+            do {
+                let analysis = try await LocalModelImportAnalyzer.shared.analyze(
+                    rawText: normalizedInput,
+                    preference: analysisPreference,
+                    referenceDate: now
+                )
+                let aiItems = await buildAIItems(
+                    from: analysis.tasks,
+                    draftID: draftID,
+                    referenceDate: now
+                )
+
+                if !aiItems.isEmpty {
+                    return makeResult(
+                        rawText: rawText,
+                        sourceType: sourceType,
+                        draftID: draftID,
+                        createdAt: now,
+                        items: aiItems,
+                        runtimeNote: "\(analysis.runtimeLabel) + Duckling 已生成 \(aiItems.count) 个候选块",
+                        errorMessage: nil
+                    )
+                }
+
+                let ruleBasedItems = await parseRuleBasedItems(
+                    rawText: normalizedInput,
+                    draftID: draftID,
+                    referenceDate: now
+                )
+                if !ruleBasedItems.isEmpty {
+                    return makeResult(
+                        rawText: rawText,
+                        sourceType: sourceType,
+                        draftID: draftID,
+                        createdAt: now,
+                        items: ruleBasedItems,
+                        runtimeNote: "\(analysis.runtimeLabel) 未返回可用任务，已回退 Vikunja + Duckling 生成 \(ruleBasedItems.count) 个候选块",
+                        errorMessage: nil
+                    )
+                }
+
+                return makeResult(
+                    rawText: rawText,
+                    sourceType: sourceType,
+                    draftID: draftID,
+                    createdAt: now,
+                    items: [],
+                    runtimeNote: "\(analysis.runtimeLabel) 没有返回可导入任务",
+                    errorMessage: "本地模型没有识别出可导入的任务"
+                )
+            } catch {
+                let ruleBasedItems = await parseRuleBasedItems(
+                    rawText: normalizedInput,
+                    draftID: draftID,
+                    referenceDate: now
+                )
+                if !ruleBasedItems.isEmpty {
+                    return makeResult(
+                        rawText: rawText,
+                        sourceType: sourceType,
+                        draftID: draftID,
+                        createdAt: now,
+                        items: ruleBasedItems,
+                        runtimeNote: "\(analysisPreference.runtimeLabel) 连接失败，已回退 Vikunja + Duckling 生成 \(ruleBasedItems.count) 个候选块",
+                        errorMessage: nil
+                    )
+                }
+
+                return makeResult(
+                    rawText: rawText,
+                    sourceType: sourceType,
+                    draftID: draftID,
+                    createdAt: now,
+                    items: [],
+                    runtimeNote: "本地模型分析失败",
+                    errorMessage: error.localizedDescription
+                )
+            }
+        }
+
+        let ruleBasedItems = await parseRuleBasedItems(
+            rawText: normalizedInput,
+            draftID: draftID,
+            referenceDate: now
+        )
+        return makeResult(
+            rawText: rawText,
+            sourceType: sourceType,
+            draftID: draftID,
+            createdAt: now,
+            items: ruleBasedItems,
+            runtimeNote: "Vikunja + Duckling + Reminders 已生成 \(ruleBasedItems.count) 个候选块",
+            errorMessage: ruleBasedItems.isEmpty ? "没有识别出可导入的任务" : nil
+        )
+    }
+
+    private static func parseRuleBasedItems(
+        rawText: String,
+        draftID: UUID,
+        referenceDate: Date
+    ) async -> [ImportDraftItem] {
+        let quickAddLines = VikunjaQuickAdd.parseMultiline(rawText)
         var lineIDToItemID: [Int: UUID] = [:]
         var items: [ImportDraftItem] = []
 
@@ -30,69 +140,243 @@ enum ImportParser {
             let parsedPriority = line.parsed.priority ?? priorityValue(from: reminder.priority)
             let dueAt = await DucklingRuntime.shared.resolveDueDate(
                 from: line.originalTitle,
-                referenceDate: now
+                referenceDate: referenceDate
             ) ?? (reminder.hasDueDate ? reminder.date : nil)
 
-            let urgency = urgencyScore(
-                for: parsedText,
-                priority: parsedPriority,
-                dueAt: dueAt,
-                reminder: reminder
-            )
-            let importance = importanceScore(for: parsedText, priority: parsedPriority)
-            let urgencyValue = PriorityVector.value(from: urgency)
-            let importanceValue = PriorityVector.value(from: importance)
-            let parsedNotes = notes(from: line.parsed)
-            let smartEntries = SmartEvaluator.seededEntries(
-                title: parsedText,
-                notes: parsedNotes,
-                dueAt: dueAt
-            )
-            let smart = SmartEvaluator.evaluate(
-                title: parsedText,
-                notes: parsedNotes,
-                smartEntries: smartEntries,
-                dueAt: dueAt
-            )
-
             items.append(
-                ImportDraftItem(
-                    id: itemID,
+                makeItem(
                     draftID: draftID,
                     sortIndex: sortIndex,
                     parentItemID: line.parentID.flatMap { lineIDToItemID[$0] },
-                    proposedTitle: parsedText,
-                    proposedNotes: parsedNotes,
-                    proposedProjectName: line.project?.nilIfBlank,
-                    proposedPriority: parsedPriority,
-                    proposedTags: mergedTags(parsed: line.parsed, rawText: line.originalTitle),
-                    proposedUrgencyScore: urgency,
-                    proposedImportanceScore: importance,
-                    proposedUrgencyValue: urgencyValue,
-                    proposedImportanceValue: importanceValue,
-                    proposedQuadrant: PriorityVector.quadrant(
-                        urgencyValue: urgencyValue,
-                        importanceValue: importanceValue
-                    ),
-                    proposedDueAt: dueAt,
-                    smartEntries: smartEntries,
-                    smartHints: smart.hints,
-                    isAccepted: true
+                    title: parsedText,
+                    notes: notes(from: line.parsed),
+                    projectName: line.project?.nilIfBlank,
+                    priority: parsedPriority,
+                    tags: mergedTags(parsed: line.parsed, rawText: line.originalTitle),
+                    dueAt: dueAt,
+                    reminder: reminder
                 )
             )
         }
 
-        let status: ParseStatus = items.isEmpty ? .failed : .parsed
+        return items
+    }
+
+    private static func buildAIItems(
+        from tasks: [LocalModelImportAnalyzer.Payload.Task],
+        draftID: UUID,
+        referenceDate: Date
+    ) async -> [ImportDraftItem] {
+        var items: [ImportDraftItem] = []
+        var nextSortIndex = 0
+
+        for task in tasks {
+            let flattened = await flattenAITask(
+                task,
+                draftID: draftID,
+                parentItemID: nil,
+                sortIndex: nextSortIndex,
+                referenceDate: referenceDate
+            )
+            items.append(contentsOf: flattened.items)
+            nextSortIndex = flattened.nextSortIndex
+        }
+
+        return items
+    }
+
+    private static func flattenAITask(
+        _ task: LocalModelImportAnalyzer.Payload.Task,
+        draftID: UUID,
+        parentItemID: UUID?,
+        sortIndex: Int,
+        referenceDate: Date
+    ) async -> (items: [ImportDraftItem], nextSortIndex: Int) {
+        let title = task.title.cleanedTaskTitle()
+        guard !title.isEmpty else { return ([], sortIndex) }
+
+        let dueAt = await resolveAIDueDate(for: task, referenceDate: referenceDate)
+        let itemID = UUID()
+        let priority = task.priority.map { min(5, max(1, $0)) }
+        let notes = normalizedOptionalText(task.notes)
+        let reminderSource = [title, notes, task.dueText].compactMap { $0 }.joined(separator: " ")
+        let reminder = parsedReminder(from: reminderSource)
+
+        let currentItem = makeItem(
+            id: itemID,
+            draftID: draftID,
+            sortIndex: sortIndex,
+            parentItemID: parentItemID,
+            title: title,
+            notes: notes,
+            projectName: normalizedOptionalText(task.projectName),
+            priority: priority,
+            tags: normalizedTags(task.tags),
+            dueAt: dueAt,
+            reminder: reminder,
+            urgencyOverride: task.urgencyScore.map { min(4, max(1, $0)) },
+            importanceOverride: task.importanceScore.map { min(4, max(1, $0)) },
+            smartOverride: smartEntries(from: task.smart, title: title, notes: notes, dueAt: dueAt)
+        )
+        var flattenedItems = [currentItem]
+        var nextSortIndex = sortIndex + 1
+
+        for child in task.childTasks {
+            let childFlattened = await flattenAITask(
+                child,
+                draftID: draftID,
+                parentItemID: itemID,
+                sortIndex: nextSortIndex,
+                referenceDate: referenceDate
+            )
+            flattenedItems.append(contentsOf: childFlattened.items)
+            nextSortIndex = childFlattened.nextSortIndex
+        }
+
+        return (flattenedItems, nextSortIndex)
+    }
+
+    private static func resolveAIDueDate(
+        for task: LocalModelImportAnalyzer.Payload.Task,
+        referenceDate: Date
+    ) async -> Date? {
+        let candidates = [
+            normalizedOptionalText(task.dueText),
+            normalizedOptionalText(task.smart?.time),
+            normalizedOptionalText(task.notes),
+        ].compactMap { $0 }
+
+        for candidate in candidates {
+            if let dueAt = await DucklingRuntime.shared.resolveDueDate(from: candidate, referenceDate: referenceDate) {
+                return dueAt
+            }
+        }
+
+        return nil
+    }
+
+    private static func makeItem(
+        id: UUID = UUID(),
+        draftID: UUID,
+        sortIndex: Int,
+        parentItemID: UUID?,
+        title: String,
+        notes: String?,
+        projectName: String?,
+        priority: Int?,
+        tags: [String],
+        dueAt: Date?,
+        reminder: RmbReminder,
+        urgencyOverride: Int? = nil,
+        importanceOverride: Int? = nil,
+        smartOverride: [SmartEntry]? = nil
+    ) -> ImportDraftItem {
+        let urgency = urgencyOverride ?? urgencyScore(
+            for: title,
+            priority: priority,
+            dueAt: dueAt,
+            reminder: reminder
+        )
+        let importance = importanceOverride ?? importanceScore(for: title, priority: priority)
+        let urgencyValue = PriorityVector.value(from: urgency)
+        let importanceValue = PriorityVector.value(from: importance)
+        let smartEntries = smartOverride ?? SmartEvaluator.seededEntries(
+            title: title,
+            notes: notes,
+            dueAt: dueAt
+        )
+        let smart = SmartEvaluator.evaluate(
+            title: title,
+            notes: notes,
+            smartEntries: smartEntries,
+            dueAt: dueAt
+        )
+
+        return ImportDraftItem(
+            id: id,
+            draftID: draftID,
+            sortIndex: sortIndex,
+            parentItemID: parentItemID,
+            proposedTitle: title,
+            proposedNotes: notes,
+            proposedProjectName: projectName,
+            proposedPriority: priority,
+            proposedTags: tags,
+            proposedUrgencyScore: urgency,
+            proposedImportanceScore: importance,
+            proposedUrgencyValue: urgencyValue,
+            proposedImportanceValue: importanceValue,
+            proposedQuadrant: PriorityVector.quadrant(
+                urgencyValue: urgencyValue,
+                importanceValue: importanceValue
+            ),
+            proposedDueAt: dueAt,
+            smartEntries: smartEntries,
+            smartHints: smart.hints,
+            isAccepted: true
+        )
+    }
+
+    private static func smartEntries(
+        from smart: LocalModelImportAnalyzer.Payload.Smart?,
+        title: String,
+        notes: String?,
+        dueAt: Date?
+    ) -> [SmartEntry] {
+        let existingEntries = [
+            SmartEntry(key: .action, value: smart?.action?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
+            SmartEntry(key: .deliverable, value: smart?.deliverable?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
+            SmartEntry(key: .measure, value: smart?.measure?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
+            SmartEntry(key: .relevance, value: smart?.relevance?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
+            SmartEntry(key: .time, value: smart?.time?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
+        ]
+
+        return SmartEvaluator.seededEntries(
+            title: title,
+            notes: notes,
+            dueAt: dueAt,
+            existingEntries: existingEntries
+        )
+    }
+
+    private static func normalizedTags(_ tags: [String]?) -> [String] {
+        Array(
+            Set(
+                (tags ?? [])
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .compactMap(\.nilIfBlank)
+            )
+        ).sorted()
+    }
+
+    private static func normalizedOptionalText(_ text: String?) -> String? {
+        text?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+    }
+
+    private static func makeResult(
+        rawText: String,
+        sourceType: ImportSourceType,
+        draftID: UUID,
+        createdAt: Date,
+        items: [ImportDraftItem],
+        runtimeNote: String,
+        errorMessage: String?
+    ) -> ImportParseResult {
         let draft = ImportDraft(
             id: draftID,
             rawText: rawText,
             sourceType: sourceType,
-            parseStatus: status,
-            createdAt: now,
-            updatedAt: now
+            parseStatus: items.isEmpty ? .failed : .parsed,
+            createdAt: createdAt,
+            updatedAt: createdAt
         )
 
-        return (draft, items)
+        return ImportParseResult(
+            draft: draft,
+            items: items,
+            runtimeNote: runtimeNote,
+            errorMessage: errorMessage
+        )
     }
 
     private static func parsedReminder(from text: String) -> RmbReminder {

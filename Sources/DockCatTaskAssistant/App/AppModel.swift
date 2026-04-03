@@ -1,6 +1,8 @@
+import AppKit
 import Foundation
 import Combine
 import AppFlowyDocumentBridge
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -13,6 +15,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var priorityPromptTaskID: UUID?
     @Published var importErrorMessage: String?
     @Published var importRuntimeNote: String?
+    @Published private(set) var localImportRuntimeStatus: String?
+    @Published private(set) var localImportRuntimeStatusIsError = false
+    @Published private(set) var isPreparingLocalImportRuntime = false
 
     private let repository: AppRepository
     private let appleRemindersBridge: AppleRemindersBridge
@@ -108,6 +113,9 @@ final class AppModel: ObservableObject {
                 self.startAutosaveTimer()
                 if didSanitizeSnapshot || didReconcileMindMap {
                     self.scheduleSave()
+                }
+                _Concurrency.Task { [weak self] in
+                    await self?.finishLocalImportBootstrap()
                 }
             }
         }
@@ -410,6 +418,159 @@ final class AppModel: ObservableObject {
         snapshot.preferences.petOffsetY = centerY
         persist(event: "preferences.pet_placement", details: "\(edge.rawValue):\(centerY)")
         refreshPetState()
+    }
+
+    func updateImportAnalysisProvider(_ provider: ImportAnalysisProvider) {
+        snapshot.preferences.importAnalysis.provider = provider
+        persist(event: "preferences.import_analysis.provider", details: provider.rawValue)
+        if provider == .ollama {
+            _Concurrency.Task { [weak self] in
+                await self?.autoconfigureLocalImportModelIfNeeded()
+                await self?.prepareEmbeddedImportRuntimeIfNeeded()
+            }
+        }
+    }
+
+    func updateImportAnalysisBaseURL(_ baseURL: String) {
+        snapshot.preferences.importAnalysis.baseURL = baseURL
+        persist(event: "preferences.import_analysis.base_url", details: baseURL)
+    }
+
+    func updateImportAnalysisModelName(_ modelName: String) {
+        snapshot.preferences.importAnalysis.modelName = modelName
+        persist(event: "preferences.import_analysis.model", details: modelName)
+    }
+
+    func updateImportAnalysisModelFilePath(_ modelFilePath: String) {
+        snapshot.preferences.importAnalysis.modelFilePath = modelFilePath
+        persist(event: "preferences.import_analysis.model_file", details: modelFilePath)
+
+        if snapshot.preferences.importAnalysis.provider == .ollama {
+            _Concurrency.Task { [weak self] in
+                await self?.prepareEmbeddedImportRuntimeIfNeeded()
+            }
+        }
+    }
+
+    func updateImportAnalysisAPIKey(_ apiKey: String) {
+        snapshot.preferences.importAnalysis.apiKey = apiKey
+        persist(event: "preferences.import_analysis.api_key", details: apiKey.isEmpty ? "empty" : "set")
+    }
+
+    func chooseImportAnalysisModelFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "选择 GGUF"
+        panel.title = "选择本地 GGUF 模型文件"
+        panel.message = "DockCat 会记住这份 GGUF 文件路径，之后直接用于任务分析。"
+        if let ggufType = UTType(filenameExtension: "gguf") {
+            panel.allowedContentTypes = [ggufType]
+        }
+
+        guard panel.runModal() == .OK, let selectedURL = panel.url else {
+            return
+        }
+
+        snapshot.preferences.importAnalysis.provider = .ollama
+        snapshot.preferences.importAnalysis.baseURL = ""
+        snapshot.preferences.importAnalysis.apiKey = ""
+        snapshot.preferences.importAnalysis.modelFilePath = selectedURL.path
+        if snapshot.preferences.importAnalysis.trimmedModelName.isEmpty {
+            snapshot.preferences.importAnalysis.modelName = selectedURL.deletingPathExtension().lastPathComponent
+        }
+        persist(event: "preferences.import_analysis.model_file.picked", details: selectedURL.path)
+
+        _Concurrency.Task { [weak self] in
+            await self?.prepareEmbeddedImportRuntimeIfNeeded()
+        }
+    }
+
+    func autodetectLocalImportModel() async {
+        guard let selection = await OllamaCatalog.shared.preferredTaskImportSelection() else {
+            localImportRuntimeStatus = "未在 ~/.ollama/models 中发现可用的 GGUF 模型"
+            localImportRuntimeStatusIsError = true
+            return
+        }
+
+        snapshot.preferences.importAnalysis.provider = .ollama
+        snapshot.preferences.importAnalysis.baseURL = ""
+        snapshot.preferences.importAnalysis.modelName = selection.name
+        snapshot.preferences.importAnalysis.modelFilePath = selection.fileURL.path
+        snapshot.preferences.importAnalysis.apiKey = ""
+        importRuntimeNote = "已连接本机 GGUF 模型：\(selection.name)"
+        localImportRuntimeStatus = "已锁定模型文件：\(selection.fileURL.lastPathComponent)"
+        localImportRuntimeStatusIsError = false
+        persist(event: "preferences.import_analysis.autoconfigured", details: selection.name)
+
+        await prepareEmbeddedImportRuntimeIfNeeded()
+    }
+
+    func prepareEmbeddedImportRuntimeIfNeeded() async {
+        let preference = snapshot.preferences.importAnalysis
+        guard preference.provider == .ollama else {
+            localImportRuntimeStatus = nil
+            localImportRuntimeStatusIsError = false
+            return
+        }
+
+        let modelPath = preference.trimmedModelFilePath
+        guard !modelPath.isEmpty else {
+            localImportRuntimeStatus = "请选择 GGUF 文件，或使用自动检测写入固定路径"
+            localImportRuntimeStatusIsError = true
+            return
+        }
+
+        isPreparingLocalImportRuntime = true
+        localImportRuntimeStatus = "正在准备内嵌运行时…"
+        localImportRuntimeStatusIsError = false
+
+        do {
+            let cliURL = try await EmbeddedLlamaRuntime.shared.prepareRuntime()
+            localImportRuntimeStatus = "内嵌运行时已就绪：\(cliURL.lastPathComponent) · 模型 \(URL(fileURLWithPath: modelPath).lastPathComponent)"
+            localImportRuntimeStatusIsError = false
+        } catch {
+            localImportRuntimeStatus = "内嵌运行时准备失败：\(error.localizedDescription)"
+            localImportRuntimeStatusIsError = true
+        }
+
+        isPreparingLocalImportRuntime = false
+    }
+
+    private func finishLocalImportBootstrap() async {
+        await autoconfigureLocalImportModelIfNeeded()
+        await prepareEmbeddedImportRuntimeIfNeeded()
+    }
+
+    private func autoconfigureLocalImportModelIfNeeded() async {
+        let currentPreference = await MainActor.run { snapshot.preferences.importAnalysis }
+        guard currentPreference.provider == .disabled
+            || (currentPreference.trimmedModelName.isEmpty && currentPreference.trimmedModelFilePath.isEmpty) else {
+            return
+        }
+
+        guard let selection = await OllamaCatalog.shared.preferredTaskImportSelection() else {
+            return
+        }
+
+        await MainActor.run {
+            let latestPreference = snapshot.preferences.importAnalysis
+            guard latestPreference.provider == .disabled
+                || (latestPreference.trimmedModelName.isEmpty && latestPreference.trimmedModelFilePath.isEmpty) else {
+                return
+            }
+
+            snapshot.preferences.importAnalysis.provider = .ollama
+            snapshot.preferences.importAnalysis.baseURL = ""
+            snapshot.preferences.importAnalysis.modelName = selection.name
+            snapshot.preferences.importAnalysis.modelFilePath = selection.fileURL.path
+            snapshot.preferences.importAnalysis.apiKey = ""
+            importRuntimeNote = "已自动连接本机 GGUF 模型：\(selection.name)"
+            localImportRuntimeStatus = "已锁定模型文件：\(selection.fileURL.lastPathComponent)"
+            localImportRuntimeStatusIsError = false
+            persist(event: "preferences.import_analysis.autoconfigured", details: selection.name)
+        }
     }
 
     private func refreshPetState(shouldPersist: Bool = true) {

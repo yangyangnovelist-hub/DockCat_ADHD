@@ -192,6 +192,20 @@ enum ImportSourceType: String, Codable, Sendable {
     case csv
 }
 
+enum ImportAnalysisProvider: String, Codable, CaseIterable, Sendable {
+    case disabled
+    case ollama
+    case openAICompatible
+
+    var title: String {
+        switch self {
+        case .disabled: "关闭"
+        case .ollama: "内嵌 GGUF"
+        case .openAICompatible: "OpenAI 兼容接口"
+        }
+    }
+}
+
 enum ParseStatus: String, Codable, Sendable {
     case pending
     case parsed
@@ -559,11 +573,158 @@ struct Tag: Codable, Identifiable, Hashable, Sendable {
     var name: String
 }
 
+struct ImportAnalysisPreference: Codable, Hashable, Sendable {
+    var provider: ImportAnalysisProvider
+    var baseURL: String
+    var modelName: String
+    var modelFilePath: String
+    var apiKey: String
+
+    static let disabled = ImportAnalysisPreference(
+        provider: .disabled,
+        baseURL: "",
+        modelName: "",
+        modelFilePath: "",
+        apiKey: ""
+    )
+
+    private enum CodingKeys: String, CodingKey {
+        case provider
+        case baseURL
+        case modelName
+        case modelFilePath
+        case apiKey
+    }
+
+    init(
+        provider: ImportAnalysisProvider,
+        baseURL: String,
+        modelName: String,
+        modelFilePath: String,
+        apiKey: String
+    ) {
+        self.provider = provider
+        self.baseURL = baseURL
+        self.modelName = modelName
+        self.modelFilePath = modelFilePath
+        self.apiKey = apiKey
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try container.decodeIfPresent(ImportAnalysisProvider.self, forKey: .provider) ?? .disabled
+        baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
+        modelName = try container.decodeIfPresent(String.self, forKey: .modelName) ?? ""
+        modelFilePath = try container.decodeIfPresent(String.self, forKey: .modelFilePath) ?? ""
+        apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(provider, forKey: .provider)
+        try container.encode(baseURL, forKey: .baseURL)
+        try container.encode(modelName, forKey: .modelName)
+        try container.encode(modelFilePath, forKey: .modelFilePath)
+        try container.encode(apiKey, forKey: .apiKey)
+    }
+
+    var trimmedBaseURL: String {
+        baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedModelName: String {
+        modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedModelFilePath: String {
+        modelFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedAPIKey: String {
+        apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var isEnabled: Bool {
+        switch provider {
+        case .disabled:
+            return false
+        case .ollama:
+            return !trimmedModelFilePath.isEmpty || !trimmedModelName.isEmpty
+        case .openAICompatible:
+            return !trimmedModelName.isEmpty
+        }
+    }
+
+    var resolvedBaseURL: String {
+        if !trimmedBaseURL.isEmpty {
+            return trimmedBaseURL
+        }
+
+        switch provider {
+        case .disabled:
+            return ""
+        case .ollama:
+            return ""
+        case .openAICompatible:
+            return "http://127.0.0.1:11434/v1"
+        }
+    }
+
+    var runtimeLabel: String {
+        let modelLabel = trimmedModelName.nilIfEmpty
+            ?? URL(fileURLWithPath: trimmedModelFilePath).lastPathComponent.nilIfEmpty
+            ?? "未命名模型"
+        return "\(provider.title) · \(modelLabel)"
+    }
+}
+
 struct AppPreference: Codable, Hashable, Sendable {
     var petEdge: PetEdge
     var petOffsetY: Double
     var lowDistractionMode: Bool
     var backgroundTaskIDs: [String]
+    var importAnalysis: ImportAnalysisPreference
+
+    init(
+        petEdge: PetEdge,
+        petOffsetY: Double,
+        lowDistractionMode: Bool,
+        backgroundTaskIDs: [String],
+        importAnalysis: ImportAnalysisPreference
+    ) {
+        self.petEdge = petEdge
+        self.petOffsetY = petOffsetY
+        self.lowDistractionMode = lowDistractionMode
+        self.backgroundTaskIDs = backgroundTaskIDs
+        self.importAnalysis = importAnalysis
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case petEdge
+        case petOffsetY
+        case lowDistractionMode
+        case backgroundTaskIDs
+        case importAnalysis
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        petEdge = try container.decode(PetEdge.self, forKey: .petEdge)
+        petOffsetY = try container.decode(Double.self, forKey: .petOffsetY)
+        lowDistractionMode = try container.decode(Bool.self, forKey: .lowDistractionMode)
+        backgroundTaskIDs = try container.decode([String].self, forKey: .backgroundTaskIDs)
+        importAnalysis = try container.decodeIfPresent(ImportAnalysisPreference.self, forKey: .importAnalysis)
+            ?? .disabled
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(petEdge, forKey: .petEdge)
+        try container.encode(petOffsetY, forKey: .petOffsetY)
+        try container.encode(lowDistractionMode, forKey: .lowDistractionMode)
+        try container.encode(backgroundTaskIDs, forKey: .backgroundTaskIDs)
+        try container.encode(importAnalysis, forKey: .importAnalysis)
+    }
 }
 
 struct MindMapDocument: Codable, Hashable, Sendable {
@@ -606,7 +767,8 @@ struct AppSnapshot: Codable, Sendable {
             petEdge: .right,
             petOffsetY: 220,
             lowDistractionMode: false,
-            backgroundTaskIDs: []
+            backgroundTaskIDs: [],
+            importAnalysis: .disabled
         ),
         selectedTaskID: nil,
         lastCelebrationAt: nil

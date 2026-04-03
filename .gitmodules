@@ -7,3 +7,6 @@
 [submodule "ThirdParty/Upstreams/whisper"]
 	path = ThirdParty/Upstreams/whisper
 	url = https://github.com/openai/whisper.git
+[submodule "ThirdParty/Upstreams/llama.cpp"]
+	path = ThirdParty/Upstreams/llama.cpp
+	url = https://github.com/ggerganov/llama.cpp.git

@@ -439,6 +439,20 @@ struct MainDashboardView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(microphoneCapture.isRecording ? .red.opacity(0.82) : .black.opacity(0.56))
             }
+
+            if let runtimeNote = appModel.importRuntimeNote?.nilIfEmpty {
+                Text(runtimeNote)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.black.opacity(0.56))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let errorMessage = appModel.importErrorMessage?.nilIfEmpty {
+                Text(errorMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.red.opacity(0.82))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -579,13 +593,14 @@ struct MainDashboardView: View {
     }
 
     private var importRecognitionButton: some View {
-        Button("识别任务") {
+        Button(appModel.isImportParsing ? "识别中..." : "识别任务") {
             _Concurrency.Task {
                 await appModel.createDraftFromImportText()
             }
         }
         .buttonStyle(.borderedProminent)
         .tint(TaskBoardPalette.accentWarm)
+        .disabled(appModel.isImportParsing || appModel.importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private var importCommitButton: some View {
@@ -594,6 +609,7 @@ struct MainDashboardView: View {
             selectedTaskID = appModel.currentTask?.id ?? appModel.tasks.first?.id
         }
         .buttonStyle(.bordered)
+        .disabled(appModel.latestDraftItems.isEmpty)
     }
 
     private var voiceImportButton: some View {

@@ -54,12 +54,17 @@ final class ImportUseCases {
             }
         }
 
-        let result = await ImportParser.parse(rawText: trimmed, sourceType: sourceType)
+        let result = await ImportParser.parse(
+            rawText: trimmed,
+            sourceType: sourceType,
+            analysisPreference: state.snapshot.preferences.importAnalysis
+        )
         mutateState { state in
             state.snapshot.importDrafts.append(result.draft)
             state.snapshot.importDraftItems.removeAll { $0.draftID == result.draft.id }
             state.snapshot.importDraftItems.append(contentsOf: result.items)
-            state.importRuntimeNote = "Vikunja + Duckling + Reminders 已生成 \(result.items.count) 个候选块"
+            state.importRuntimeNote = result.runtimeNote
+            state.importErrorMessage = result.errorMessage
         }
 
         persist("import.parsed", "\(sourceType.rawValue):\(result.items.count) items")

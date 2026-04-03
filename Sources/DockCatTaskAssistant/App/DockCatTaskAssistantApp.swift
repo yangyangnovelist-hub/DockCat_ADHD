@@ -48,21 +48,96 @@ struct DockCatTaskAssistantApp: App {
 
         Settings {
             Form {
-                Toggle("低打扰模式", isOn: Binding(
-                    get: { appModel.snapshot.preferences.lowDistractionMode },
-                    set: { _ in appModel.toggleLowDistractionMode() }
-                ))
+                Section("通用") {
+                    Toggle("低打扰模式", isOn: Binding(
+                        get: { appModel.snapshot.preferences.lowDistractionMode },
+                        set: { _ in appModel.toggleLowDistractionMode() }
+                    ))
 
-                Picker("停靠边缘", selection: Binding(
-                    get: { appModel.snapshot.preferences.petEdge },
-                    set: { appModel.updatePetPlacement(edge: $0, centerY: appModel.snapshot.preferences.petOffsetY) }
-                )) {
-                    Text("左侧").tag(PetEdge.left)
-                    Text("右侧").tag(PetEdge.right)
+                    Picker("停靠边缘", selection: Binding(
+                        get: { appModel.snapshot.preferences.petEdge },
+                        set: { appModel.updatePetPlacement(edge: $0, centerY: appModel.snapshot.preferences.petOffsetY) }
+                    )) {
+                        Text("左侧").tag(PetEdge.left)
+                        Text("右侧").tag(PetEdge.right)
+                    }
+                }
+
+                Section("批量导入 AI 增强") {
+                    let provider = appModel.snapshot.preferences.importAnalysis.provider
+
+                    Picker("模型接口", selection: Binding(
+                        get: { appModel.snapshot.preferences.importAnalysis.provider },
+                        set: { appModel.updateImportAnalysisProvider($0) }
+                    )) {
+                        ForEach(ImportAnalysisProvider.allCases, id: \.rawValue) { provider in
+                            Text(provider.title).tag(provider)
+                        }
+                    }
+
+                    TextField("模型名", text: Binding(
+                        get: { appModel.snapshot.preferences.importAnalysis.modelName },
+                        set: { appModel.updateImportAnalysisModelName($0) }
+                    ), prompt: Text("例如 qwen2.5:7b-instruct"))
+                    .disabled(provider == .disabled)
+
+                    if provider == .ollama {
+                        TextField("GGUF 文件", text: Binding(
+                            get: { appModel.snapshot.preferences.importAnalysis.modelFilePath },
+                            set: { appModel.updateImportAnalysisModelFilePath($0) }
+                        ), prompt: Text("/path/to/model.gguf"))
+
+                        HStack {
+                            Button("自动检测本机模型") {
+                                _Concurrency.Task {
+                                    await appModel.autodetectLocalImportModel()
+                                }
+                            }
+
+                            Button("选择 GGUF 文件…") {
+                                appModel.chooseImportAnalysisModelFile()
+                            }
+
+                            Button(appModel.isPreparingLocalImportRuntime ? "准备中…" : "准备内嵌运行时") {
+                                _Concurrency.Task {
+                                    await appModel.prepareEmbeddedImportRuntimeIfNeeded()
+                                }
+                            }
+                            .disabled(appModel.isPreparingLocalImportRuntime)
+                        }
+
+                        if let runtimeStatus = appModel.localImportRuntimeStatus?.nilIfEmpty {
+                            Text(runtimeStatus)
+                                .font(.footnote)
+                                .foregroundStyle(appModel.localImportRuntimeStatusIsError ? .red : .secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    if provider == .openAICompatible {
+                        TextField("基础 URL", text: Binding(
+                            get: { appModel.snapshot.preferences.importAnalysis.baseURL },
+                            set: { appModel.updateImportAnalysisBaseURL($0) }
+                        ), prompt: Text(appModel.snapshot.preferences.importAnalysis.resolvedBaseURL))
+                        .disabled(provider == .disabled)
+
+                        SecureField("API Key（可选）", text: Binding(
+                            get: { appModel.snapshot.preferences.importAnalysis.apiKey },
+                            set: { appModel.updateImportAnalysisAPIKey($0) }
+                        ))
+                        .disabled(provider == .disabled)
+                    }
+
+                    Text(provider == .ollama
+                         ? "内嵌 GGUF 模式会把你选中的 GGUF 文件路径固定保存到 DockCat 配置里，并在首次使用时自动准备 llama.cpp 运行时。任务拆分全程本机完成，不走 Ollama HTTP API；模型失败时才会回退到当前规则解析。"
+                         : "OpenAI 兼容接口模式会通过你填写的模型地址访问服务。模型失败时会回退到当前规则解析。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(20)
-            .frame(width: 320)
+            .frame(width: 420)
         }
     }
 }
