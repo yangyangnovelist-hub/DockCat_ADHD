@@ -132,13 +132,6 @@ final class TaskUseCases {
     }
 
     func setCurrentTask(id: UUID) {
-        let state = getState()
-        let previousTaskID = state.snapshot.selectedTaskID
-            ?? state.snapshot.tasks.first(where: \.isCurrent)?.id
-        if previousTaskID != id {
-            pauseLeavingTaskIfNeeded(previousTaskID)
-        }
-
         mutateState { state in
             state.snapshot.selectedTaskID = id
             state.snapshot.tasks = state.snapshot.tasks.map { task in
@@ -339,127 +332,6 @@ final class TaskUseCases {
         refreshPetState()
     }
 
-    func startCurrentTask(timerMode: TaskTimerMode = .countUp) -> UUID? {
-        let state = getState()
-        guard let currentTask = TaskService.currentTask(in: state.snapshot) else { return nil }
-        return startTask(id: currentTask.id, timerMode: timerMode)
-    }
-
-    @discardableResult
-    func startTask(id taskID: UUID, timerMode: TaskTimerMode = .countUp) -> UUID? {
-        let state = getState()
-        guard let task = task(id: taskID, in: state.snapshot) else { return nil }
-
-        if let activeTaskID = activeTaskID(in: state.snapshot) {
-            pauseTask(id: activeTaskID)
-        }
-
-        mutateState { state in
-            state.snapshot.tasks = state.snapshot.tasks.map { existingTask in
-                guard existingTask.id == taskID else { return existingTask }
-                var updated = existingTask
-                updated.status = .doing
-                updated.completedAt = nil
-                updated.touch()
-                return updated
-            }
-            self.setBackgroundState(for: taskID, enabled: false, in: &state.snapshot)
-
-            if timerMode != .untimed {
-                state.snapshot.sessions.insert(
-                    Session(
-                        id: UUID(),
-                        taskID: taskID,
-                        startedAt: Date(),
-                        endedAt: nil,
-                        totalSeconds: 0,
-                        state: .active,
-                        interruptionCount: 0,
-                        timerMode: timerMode,
-                        countdownTargetSeconds: timerMode == .countdown ? self.countdownTargetSeconds(for: task) : nil
-                    ),
-                    at: 0
-                )
-            }
-        }
-
-        if timerMode != .untimed {
-            persist("session.started", "\(task.title):\(timerMode.rawValue)")
-        } else {
-            persist("task.started.untimed", task.title)
-        }
-        refreshPetState()
-        return taskID
-    }
-
-    func pauseCurrentTask() {
-        let state = getState()
-        guard let currentTask = TaskService.currentTask(in: state.snapshot) else { return }
-        pauseTask(id: currentTask.id)
-    }
-
-    func pauseTask(id taskID: UUID) {
-        let state = getState()
-        guard let task = task(id: taskID, in: state.snapshot) else { return }
-        guard task.status == .doing || activeTaskID(in: state.snapshot) == taskID else { return }
-
-        let now = Date()
-        let activeSession = TaskService.activeSession(in: state.snapshot)
-
-        mutateState { state in
-            if let activeSession, activeSession.taskID == taskID {
-                state.snapshot.sessions = state.snapshot.sessions.map { session in
-                    guard session.id == activeSession.id else { return session }
-                    var updated = session
-                    updated.state = .paused
-                    updated.endedAt = now
-                    updated.totalSeconds = TaskService.liveSeconds(for: session, now: now)
-                    return updated
-                }
-            }
-
-            state.snapshot.tasks = state.snapshot.tasks.map { existingTask in
-                guard existingTask.id == taskID else { return existingTask }
-                var updated = existingTask
-                updated.status = .paused
-                updated.touch()
-                return updated
-            }
-            self.clearBackgroundTask(taskID, in: &state.snapshot)
-        }
-
-        persist("session.paused", task.id.uuidString)
-        refreshPetState()
-    }
-
-    func interruptCurrentTask(reason: String) {
-        let state = getState()
-        guard let activeSession = TaskService.activeSession(in: state.snapshot) else { return }
-
-        let now = Date()
-        mutateState { state in
-            state.snapshot.interrupts.insert(
-                Interrupt(
-                    id: UUID(),
-                    sessionID: activeSession.id,
-                    reason: reason.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                    startedAt: now,
-                    endedAt: now
-                ),
-                at: 0
-            )
-            state.snapshot.sessions = state.snapshot.sessions.map { session in
-                guard session.id == activeSession.id else { return session }
-                var updated = session
-                updated.interruptionCount += 1
-                return updated
-            }
-        }
-
-        pauseTask(id: activeSession.taskID)
-        persist("session.interrupted", reason)
-    }
-
     func completeCurrentTask(switchToTaskID preferredTaskID: UUID? = nil) -> UUID? {
         let state = getState()
         guard let currentTask = TaskService.currentTask(in: state.snapshot) else { return nil }
@@ -491,8 +363,6 @@ final class TaskUseCases {
                 : snapshot.selectedTaskID)
 
         mutateState { state in
-            self.stopActiveSessionIfNeeded(for: taskID, newState: .stopped, now: now, in: &state.snapshot)
-
             state.snapshot.tasks = state.snapshot.tasks.map { task in
                 guard task.id == taskID else {
                     guard isSelectedTask || resolvedPreferredTaskID != nil else { return task }
@@ -550,7 +420,6 @@ final class TaskUseCases {
         let snapshot = state.snapshot
         guard let task = task(id: taskID, in: snapshot) else { return nil }
 
-        let now = Date()
         let isSelectedTask = snapshot.selectedTaskID == taskID
         let preferredRootTaskID = TaskService.rootAncestorID(for: taskID, in: snapshot)
         let nextFocusTaskID = isSelectedTask
@@ -562,8 +431,6 @@ final class TaskUseCases {
             : snapshot.selectedTaskID
 
         mutateState { state in
-            self.stopActiveSessionIfNeeded(for: taskID, newState: .stopped, now: now, in: &state.snapshot)
-
             state.snapshot.tasks = state.snapshot.tasks.map { existingTask in
                 guard existingTask.id == taskID else { return existingTask }
                 var updated = existingTask
@@ -592,28 +459,9 @@ final class TaskUseCases {
         return nextFocusTaskID ?? snapshot.selectedTaskID
     }
 
-    private func pauseLeavingTaskIfNeeded(_ taskID: UUID?) {
-        let state = getState()
-        guard let taskID else { return }
-        guard !isBackgroundTask(taskID, in: state.snapshot) else { return }
-        guard let leavingTask = task(id: taskID, in: state.snapshot) else { return }
-        guard leavingTask.status == .doing || activeTaskID(in: state.snapshot) == taskID else { return }
-        pauseTask(id: taskID)
-    }
-
     private func task(id: UUID?, in snapshot: AppSnapshot) -> Task? {
         guard let id else { return nil }
         return snapshot.tasks.first(where: { $0.id == id })
-    }
-
-    private func activeTaskID(in snapshot: AppSnapshot) -> UUID? {
-        TaskService.activeSession(in: snapshot)?.taskID
-    }
-
-    private func isBackgroundTask(_ taskID: UUID?, in snapshot: AppSnapshot) -> Bool {
-        guard let taskID else { return false }
-        let backgroundTaskIDs = Set(snapshot.preferences.backgroundTaskIDs.compactMap(UUID.init(uuidString:)))
-        return backgroundTaskIDs.contains(taskID)
     }
 
     private func nextSortIndex(for parentTaskID: UUID?, excluding taskID: UUID? = nil, in snapshot: AppSnapshot) -> Int {
@@ -634,23 +482,6 @@ final class TaskUseCases {
         }
     }
 
-    private func stopActiveSessionIfNeeded(
-        for taskID: UUID,
-        newState: SessionState,
-        now: Date,
-        in snapshot: inout AppSnapshot
-    ) {
-        guard let activeSession = TaskService.activeSession(in: snapshot), activeSession.taskID == taskID else { return }
-        snapshot.sessions = snapshot.sessions.map { session in
-            guard session.id == activeSession.id else { return session }
-            var updated = session
-            updated.state = newState
-            updated.endedAt = now
-            updated.totalSeconds = TaskService.liveSeconds(for: session, now: now)
-            return updated
-        }
-    }
-
     private func setBackgroundState(for taskID: UUID, enabled: Bool, in snapshot: inout AppSnapshot) {
         var ids = snapshot.preferences.backgroundTaskIDs.filter { UUID(uuidString: $0) != nil }
         let serializedID = taskID.uuidString
@@ -666,9 +497,5 @@ final class TaskUseCases {
 
     private func clearBackgroundTask(_ taskID: UUID, in snapshot: inout AppSnapshot) {
         setBackgroundState(for: taskID, enabled: false, in: &snapshot)
-    }
-
-    private func countdownTargetSeconds(for task: Task) -> Int {
-        max(task.estimatedMinutes ?? 25, 1) * 60
     }
 }

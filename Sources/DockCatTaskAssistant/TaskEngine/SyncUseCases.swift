@@ -147,8 +147,6 @@ final class SyncUseCases {
 
             self.normalizeSelectedTaskAfterMindMapSync(in: &state.snapshot)
             self.pruneBackgroundTasksAfterMindMapSync(in: &state.snapshot)
-            self.stopSessionsForArchivedTasksAfterMindMapSync(in: &state.snapshot)
-
             if let firstNewTaskID = syncResult.newTaskIDs.first {
                 state.priorityPromptTaskID = firstNewTaskID
                 state.snapshot.selectedTaskID = firstNewTaskID
@@ -183,23 +181,5 @@ final class SyncUseCases {
     private func pruneBackgroundTasksAfterMindMapSync(in snapshot: inout AppSnapshot) {
         let validTaskIDs = Set(snapshot.tasks.filter { $0.status != .archived }.map(\.id.uuidString))
         snapshot.preferences.backgroundTaskIDs = snapshot.preferences.backgroundTaskIDs.filter { validTaskIDs.contains($0) }
-    }
-
-    private func stopSessionsForArchivedTasksAfterMindMapSync(in snapshot: inout AppSnapshot) {
-        let now = Date()
-        let archivedTaskIDs = Set(snapshot.tasks.filter { $0.status == .archived }.map(\.id))
-        guard !archivedTaskIDs.isEmpty else { return }
-
-        snapshot.sessions = snapshot.sessions.map { session in
-            guard archivedTaskIDs.contains(session.taskID),
-                  session.endedAt == nil else {
-                return session
-            }
-            var updated = session
-            updated.state = .paused
-            updated.endedAt = now
-            updated.totalSeconds = TaskService.liveSeconds(for: session, now: now)
-            return updated
-        }
     }
 }

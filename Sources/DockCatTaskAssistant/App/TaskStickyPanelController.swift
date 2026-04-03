@@ -5,6 +5,7 @@ import SwiftUI
 final class TaskStickyPanelController: NSWindowController, NSWindowDelegate {
     private let appModel: AppModel
     private let defaultPanelSize = NSSize(width: 760, height: 600)
+    private var contentView: NSHostingView<AnyView>?
 
     init(appModel: AppModel) {
         self.appModel = appModel
@@ -44,7 +45,6 @@ final class TaskStickyPanelController: NSWindowController, NSWindowDelegate {
 
     private func ensurePanel() -> NSPanel? {
         if let panel = window as? NSPanel {
-            refreshContent(of: panel)
             return panel
         }
 
@@ -73,13 +73,18 @@ final class TaskStickyPanelController: NSWindowController, NSWindowDelegate {
         panel.delegate = self
 
         window = panel
-        refreshContent(of: panel)
+        configureContentIfNeeded(for: panel)
         return panel
     }
 
-    private func refreshContent(of panel: NSPanel) {
-        panel.contentView = NSHostingView(
-            rootView: StickyTaskBoardView(
+    private func configureContentIfNeeded(for panel: NSPanel) {
+        guard contentView == nil else {
+            panel.contentView = contentView
+            return
+        }
+
+        let rootView = AnyView(
+            StickyTaskBoardView(
                 appModel: appModel,
                 title: "Dock Note",
                 subtitle: "单击选中，双击展开，双击标题重命名",
@@ -89,6 +94,9 @@ final class TaskStickyPanelController: NSWindowController, NSWindowDelegate {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         )
+        let hostingView = NSHostingView(rootView: rootView)
+        contentView = hostingView
+        panel.contentView = hostingView
     }
 
     private func anchoredFrame(for panel: NSPanel, anchorFrame: CGRect?) -> CGRect {

@@ -331,29 +331,9 @@ struct StickyTaskBoardView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Menu {
-                        Button("正向计时开始") {
-                            startFocusedTask(timerMode: .countUp)
-                        }
-                        Button("倒计时开始") {
-                            startFocusedTask(timerMode: .countdown)
-                        }
-                        Divider()
-                        Button("不计时开始") {
-                            startFocusedTask(timerMode: .untimed)
-                        }
-                    } label: {
-                        Text("开始")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .buttonStyle(.borderedProminent)
-                    .tint(TaskBoardPalette.accent)
-
-                    Button("暂停") { pauseFocusedTask() }
-                        .buttonStyle(.bordered)
-
                     Button("完成") { completeFocusedTask() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .tint(TaskBoardPalette.accent)
 
                     Button("后台运行") {
                         moveFocusedTaskToBackground()
@@ -504,18 +484,7 @@ struct StickyTaskBoardView: View {
                         .layoutPriority(1)
                 } badges: {
                     taskRowBadges(for: task, includeHierarchy: true, includeChildCount: false)
-                    StatusBadge(
-                        title: appModel.activeTaskID == task.id
-                            ? (appModel.activeSession?.timerMode.title ?? "后台运行")
-                            : "后台运行",
-                        color: appModel.activeTaskID == task.id ? TaskBoardPalette.accent : TaskBoardPalette.quiet
-                    )
-                    if let session = appModel.activeSession, session.taskID == task.id {
-                        StatusBadge(
-                            title: activeTimerDetailText(for: session),
-                            color: TaskBoardPalette.accent
-                        )
-                    }
+                    StatusBadge(title: "后台运行", color: TaskBoardPalette.quiet)
                 }
             }
 
@@ -525,11 +494,6 @@ struct StickyTaskBoardView: View {
                     selectTask(task.id)
                 }
                 .buttonStyle(.bordered)
-
-                Button("暂停") {
-                    appModel.pauseTask(id: task.id)
-                }
-                .buttonStyle(.borderless)
 
                 Button("完成") {
                     appModel.completeTask(id: task.id)
@@ -879,16 +843,6 @@ struct StickyTaskBoardView: View {
         selectedTaskID ?? appModel.currentTask?.id
     }
 
-    private func startFocusedTask(timerMode: TaskTimerMode = .countUp) {
-        guard let id = focusedTaskID else { return }
-        appModel.startTask(id: id, timerMode: timerMode)
-    }
-
-    private func pauseFocusedTask() {
-        guard let id = focusedTaskID else { return }
-        appModel.pauseTask(id: id)
-    }
-
     private func completeFocusedTask() {
         guard let id = focusedTaskID else { return }
         let nextTaskID = appModel.completeTask(id: id)
@@ -941,17 +895,6 @@ struct StickyTaskBoardView: View {
 
         switchToRootTask(taskID)
         return true
-    }
-
-    private func activeTimerDetailText(for session: Session) -> String {
-        switch session.timerMode {
-        case .countUp:
-            return "已跑 \(formatDuration(TaskService.liveSeconds(for: session)))"
-        case .countdown:
-            return "剩余 \(formatDuration(TaskService.remainingSeconds(for: session) ?? 0))"
-        case .untimed:
-            return "无计时"
-        }
     }
 
     private var headerSubtitleText: String {

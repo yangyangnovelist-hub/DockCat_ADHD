@@ -40,16 +40,10 @@ struct DockCatCommands: Commands {
 
             Divider()
 
-            Button("开始当前任务") {
-                appModel.startCurrentTask()
+            Button("后台运行当前任务") {
+                appModel.moveCurrentTaskToBackground()
             }
             .keyboardShortcut(.return, modifiers: [.command])
-            .disabled(appModel.currentTask == nil)
-
-            Button("暂停当前任务") {
-                appModel.pauseCurrentTask()
-            }
-            .keyboardShortcut(.return, modifiers: [.command, .shift])
             .disabled(appModel.currentTask == nil)
 
             Button("完成当前任务") {

@@ -119,8 +119,6 @@ final class AppModel: ObservableObject {
     var tasks: [Task] { TaskService.sortedTasks(in: snapshot) }
     var taskDepths: [UUID: Int] { TaskService.depthMap(in: snapshot) }
     var currentTask: Task? { TaskService.currentTask(in: snapshot) }
-    var activeSession: Session? { TaskService.activeSession(in: snapshot) }
-    var activeTaskID: UUID? { activeSession?.taskID }
     var backgroundTaskIDs: Set<UUID> {
         Set(snapshot.preferences.backgroundTaskIDs.compactMap(UUID.init(uuidString:)))
     }
@@ -178,17 +176,6 @@ final class AppModel: ObservableObject {
 
     func draftItem(id: UUID?) -> ImportDraftItem? {
         snapshot.importDraftItems.first { $0.id == id }
-    }
-
-    func taskSessions(taskID: UUID) -> [Session] {
-        snapshot.sessions
-            .filter { $0.taskID == taskID }
-            .sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
-    }
-
-    func latestSession(for taskID: UUID?) -> Session? {
-        guard let taskID else { return nil }
-        return taskSessions(taskID: taskID).first
     }
 
     func isBackgroundTask(_ taskID: UUID?) -> Bool {
@@ -309,7 +296,12 @@ final class AppModel: ObservableObject {
 
         sanitizedSnapshot.tasks = sanitizedSnapshot.tasks.map { task in
             var updated = task
+            let normalizedStatus: TaskStatus = task.status == .paused ? .todo : task.status
             let normalizedSortIndex = normalizedSortIndices[task.id] ?? 0
+            if updated.status != normalizedStatus {
+                updated.status = normalizedStatus
+                didChange = true
+            }
             if updated.sortIndex != normalizedSortIndex {
                 updated.sortIndex = normalizedSortIndex
                 didChange = true
@@ -317,29 +309,17 @@ final class AppModel: ObservableObject {
             return updated
         }
 
+        if !sanitizedSnapshot.sessions.isEmpty {
+            sanitizedSnapshot.sessions = []
+            didChange = true
+        }
+
+        if !sanitizedSnapshot.interrupts.isEmpty {
+            sanitizedSnapshot.interrupts = []
+            didChange = true
+        }
+
         return (sanitizedSnapshot, didChange)
-    }
-
-    @discardableResult
-    func startCurrentTask(timerMode: TaskTimerMode = .countUp) -> UUID? {
-        taskUseCases.startCurrentTask(timerMode: timerMode)
-    }
-
-    @discardableResult
-    func startTask(id taskID: UUID, timerMode: TaskTimerMode = .countUp) -> UUID? {
-        taskUseCases.startTask(id: taskID, timerMode: timerMode)
-    }
-
-    func pauseCurrentTask() {
-        taskUseCases.pauseCurrentTask()
-    }
-
-    func pauseTask(id taskID: UUID) {
-        taskUseCases.pauseTask(id: taskID)
-    }
-
-    func interruptCurrentTask(reason: String) {
-        taskUseCases.interruptCurrentTask(reason: reason)
     }
 
     @discardableResult
@@ -506,9 +486,6 @@ final class AppModel: ObservableObject {
         autosaveTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             _Concurrency.Task { @MainActor [weak self] in
                 guard let self else { return }
-                if self.activeSession != nil {
-                    self.objectWillChange.send()
-                }
                 let nextPetState = PetStateMachine.resolve(
                     snapshot: self.snapshot,
                     isHovering: self.isPetHovering,

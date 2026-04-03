@@ -274,7 +274,10 @@ struct MainDashboardView: View {
 
             LazyVGrid(columns: metricColumns, spacing: 10) {
                 metricCard(title: "已完成", value: "\(appModel.todayStats.completedCount)")
-                metricCard(title: "中断次数", value: "\(appModel.todayStats.interruptionCount)")
+                metricCard(
+                    title: "后台进行中",
+                    value: "\(appModel.backgroundTasks.filter { $0.status == .doing }.count)"
+                )
                 metricCard(title: "待处理", value: "\(appModel.tasks.filter { $0.status != .done && $0.status != .archived }.count)")
             }
 
@@ -335,16 +338,11 @@ struct MainDashboardView: View {
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
-                    primaryStartButton
-                    pauseCurrentTaskButton
                     completeCurrentTaskButton
                     backgroundCurrentTaskButton
                 }
 
                 VStack(spacing: 8) {
-                    primaryStartButton.frame(maxWidth: .infinity)
-                    pauseCurrentTaskButton
-                        .frame(maxWidth: .infinity)
                     completeCurrentTaskButton
                         .frame(maxWidth: .infinity)
                     backgroundCurrentTaskButton
@@ -463,27 +461,6 @@ struct MainDashboardView: View {
         .background(TaskBoardPalette.canvas.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private var primaryStartButton: some View {
-        Menu {
-            Button("正向计时开始") {
-                appModel.startCurrentTask(timerMode: .countUp)
-            }
-            Button("倒计时开始") {
-                appModel.startCurrentTask(timerMode: .countdown)
-            }
-            Divider()
-            Button("不计时开始") {
-                appModel.startCurrentTask(timerMode: .untimed)
-            }
-        } label: {
-            Text("开始")
-        }
-    }
-
-    private var pauseCurrentTaskButton: some View {
-        Button("暂停") { appModel.pauseCurrentTask() }
-    }
-
     private var completeCurrentTaskButton: some View {
         Button("完成") { completeCurrentTaskFromSummary() }
     }
@@ -571,50 +548,17 @@ struct MainDashboardView: View {
                 color: currentTask.status == .doing ? TaskBoardPalette.accent : TaskBoardPalette.accentWarm
             )
             StatusBadge(title: currentTask.quadrant?.title ?? "无", color: TaskBoardPalette.accentWarm)
-            if let timerStatus = timerStatusBadge(for: currentTask) {
-                StatusBadge(title: timerStatus.title, color: timerStatus.color)
+            if appModel.isBackgroundTask(currentTask.id) {
+                StatusBadge(title: "后台运行", color: TaskBoardPalette.quiet)
             }
         }
     }
 
     @ViewBuilder
     private var petStateBadges: some View {
-        if let currentTask = appModel.currentTask,
-           let session = appModel.activeSession,
-           session.taskID == currentTask.id {
-            StatusBadge(
-                title: activeTimerDetailText(for: session),
-                color: TaskBoardPalette.accent
-            )
-        }
         let backgroundCount = appModel.backgroundTasks.filter { $0.status == .doing && $0.id != appModel.currentTask?.id }.count
         if backgroundCount > 0 {
             StatusBadge(title: "\(backgroundCount) 个后台进行中", color: TaskBoardPalette.quiet)
-        }
-    }
-
-    private func timerStatusBadge(for task: Task) -> (title: String, color: Color)? {
-        if let session = appModel.activeSession, session.taskID == task.id {
-            return (session.timerMode.title, TaskBoardPalette.accent)
-        }
-
-        guard task.status == .doing else { return nil }
-
-        if appModel.isBackgroundTask(task.id) {
-            return ("后台运行", TaskBoardPalette.quiet)
-        }
-
-        return ("无计时", TaskBoardPalette.accentWarm)
-    }
-
-    private func activeTimerDetailText(for session: Session) -> String {
-        switch session.timerMode {
-        case .countUp:
-            return "已跑 \(formatDuration(TaskService.liveSeconds(for: session)))"
-        case .countdown:
-            return "剩余 \(formatDuration(TaskService.remainingSeconds(for: session) ?? 0))"
-        case .untimed:
-            return "无计时"
         }
     }
 
