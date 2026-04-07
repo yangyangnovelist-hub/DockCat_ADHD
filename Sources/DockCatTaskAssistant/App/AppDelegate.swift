@@ -1,6 +1,4 @@
 import AppKit
-import Combine
-import OnScreen
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -10,7 +8,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var taskPanelController: TaskStickyPanelController?
     private var dashboardPresenter: (() -> Void)?
     private var configured = false
-    private var cancellables = Set<AnyCancellable>()
     private weak var dashboardWindow: NSWindow?
     private var dashboardVisibleObserver: NSObjectProtocol?
     private var suppressUnexpectedDashboardUntil = Date.distantPast
@@ -32,8 +29,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.taskPanelController = TaskStickyPanelController(appModel: appModel)
         self.petWindowController = PetWindowController(appModel: appModel)
+        self.petWindowController?.onSingleClick = { [weak self] anchorFrame in
+            self?.showDockNote(anchorFrame: anchorFrame)
+        }
+        self.petWindowController?.onDoubleClick = { [weak self] in
+            self?.taskPanelController?.closePanel()
+            self?.showDashboard()
+        }
+        self.petWindowController?.onLongPress = { [weak self] in
+            self?.taskPanelController?.closePanel()
+            self?.appModel.toggleLowDistractionMode()
+        }
         self.petWindowController?.updatePosition(animated: false)
-        bindNotifications()
     }
 
     func toggleDockNote() {
@@ -85,28 +92,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         return true
-    }
-
-    private func bindNotifications() {
-        NotificationCenter.default.publisher(for: .onScreenEntityPrimaryClick)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] notification in
-                guard let self else { return }
-                let anchorFrame = (notification.userInfo?[OnScreenNotificationUserInfoKey.windowFrame] as? NSValue)?.rectValue
-                let clickCount = notification.userInfo?[OnScreenNotificationUserInfoKey.clickCount] as? Int ?? 1
-                let isLongPress = notification.userInfo?[OnScreenNotificationUserInfoKey.isLongPress] as? Bool ?? false
-                
-                if isLongPress {
-                    self.taskPanelController?.closePanel()
-                    self.appModel.toggleLowDistractionMode()
-                } else if clickCount >= 2 {
-                    self.taskPanelController?.closePanel()
-                    self.showDashboard()
-                } else {
-                    self.showDockNote(anchorFrame: anchorFrame)
-                }
-            }
-            .store(in: &cancellables)
     }
 
     private func showDockNote(anchorFrame: CGRect?) {
