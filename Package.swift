@@ -14,7 +14,6 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(path: "ThirdParty/Bridges/AppFlowyDocumentBridge"),
         .package(path: "ThirdParty/Bridges/RemindersMenubarBridge"),
         .package(path: "ThirdParty/Bridges/VikunjaQuickAddBridge"),
         .package(path: "ThirdParty/Bridges/BongoCatInputBridge"),
@@ -29,7 +28,6 @@ let package = Package(
         .executableTarget(
             name: "DockCatTaskAssistant",
             dependencies: [
-                .product(name: "AppFlowyDocumentBridge", package: "AppFlowyDocumentBridge"),
                 .product(name: "RemindersMenubarBridge", package: "RemindersMenubarBridge"),
                 .product(name: "VikunjaQuickAddBridge", package: "VikunjaQuickAddBridge"),
                 .product(name: "BongoCatInputBridge", package: "BongoCatInputBridge"),
@@ -48,7 +46,10 @@ let package = Package(
         ),
         .testTarget(
             name: "DockCatTaskAssistantTests",
-            dependencies: ["DockCatTaskAssistant"]
+            dependencies: ["DockCatTaskAssistant"],
+            resources: [
+                .process("Fixtures")
+            ]
         ),
     ]
 )

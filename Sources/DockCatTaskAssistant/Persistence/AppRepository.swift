@@ -15,6 +15,7 @@ actor AppRepository {
     private let decoder: JSONDecoder
     private let preferencesStore: AppPreferencesStore
     private var latestSavedSnapshotGeneration = 0
+    private var cachedPersistedSnapshot: AppSnapshot?
 
     init(baseDirectory: URL? = nil) {
         let fileManager = FileManager.default
@@ -82,10 +83,14 @@ actor AppRepository {
     }
 
     func loadSnapshot() -> AppSnapshot {
+        let signpost = PerformanceTrace.begin("loadSnapshot", details: "starting")
+        defer {
+            PerformanceTrace.end("loadSnapshot", state: signpost, details: "finished")
+        }
         let preferences = preferencesStore.load()
 
         do {
-            return try dbQueue.read { db in
+            let snapshot = try dbQueue.read { db in
                 let projects = try ProjectRecord.fetchAll(db).map(\.project)
                 let tasks = try TaskRecord
                     .filter(Column("tombstone") == false)
@@ -117,6 +122,8 @@ actor AppRepository {
                     lastCelebrationAt: appState?.lastCelebrationAt.map(Date.init(timeIntervalSince1970:))
                 )
             }
+            cachedPersistedSnapshot = snapshot
+            return snapshot
         } catch {
             NSLog("Snapshot load failed: \(error.localizedDescription)")
             var fallback = AppSnapshot.empty
@@ -125,19 +132,41 @@ actor AppRepository {
         }
     }
 
-    func saveSnapshot(_ snapshot: AppSnapshot, generation: Int = 0) async {
+    func saveSnapshot(_ snapshot: AppSnapshot, generation: Int = 0, scope: PersistenceScope = .full) async {
         guard generation >= latestSavedSnapshotGeneration else { return }
         latestSavedSnapshotGeneration = generation
+        let signpost = PerformanceTrace.begin(
+            "saveSnapshot",
+            details: "tasks=\(snapshot.tasks.count) drafts=\(snapshot.importDraftItems.count) generation=\(generation) scope=\(scope.rawValue)"
+        )
+        defer {
+            PerformanceTrace.end(
+                "saveSnapshot",
+                state: signpost,
+                details: "tasks=\(snapshot.tasks.count) generation=\(generation) scope=\(scope.rawValue)"
+            )
+        }
 
         do {
-            try writeSnapshot(snapshot)
-            preferencesStore.save(snapshot.preferences)
+            if let cachedPersistedSnapshot {
+                try writeSnapshot(snapshot, comparedTo: cachedPersistedSnapshot, scope: scope)
+            } else {
+                try writeSnapshot(snapshot, scope: scope)
+            }
+            if scope.contains(.preferences), cachedPersistedSnapshot?.preferences != snapshot.preferences {
+                preferencesStore.save(snapshot.preferences)
+            }
+            cachedPersistedSnapshot = snapshot
         } catch {
             NSLog("Snapshot save failed: \(error.localizedDescription)")
         }
     }
 
     func appendEvent(_ event: String, details: String) async {
+        let signpost = PerformanceTrace.begin("appendEvent", details: event)
+        defer {
+            PerformanceTrace.end("appendEvent", state: signpost, details: event)
+        }
         let entry = EventLogEntry(timestamp: Date(), event: event, details: details)
         do {
             try FileManager.default.createDirectory(at: eventLogURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -161,6 +190,34 @@ actor AppRepository {
 
     private func writeSnapshot(_ snapshot: AppSnapshot) throws {
         try Self.writeSnapshot(snapshot, dbQueue: dbQueue, encoder: encoder)
+    }
+
+    private func writeSnapshot(_ snapshot: AppSnapshot, scope: PersistenceScope) throws {
+        try Self.writeSnapshot(snapshot, scope: scope, dbQueue: dbQueue, encoder: encoder)
+    }
+
+    private func writeSnapshot(_ snapshot: AppSnapshot, comparedTo previousSnapshot: AppSnapshot) throws {
+        try Self.writeSnapshot(
+            snapshot,
+            comparedTo: previousSnapshot,
+            scope: .full,
+            dbQueue: dbQueue,
+            encoder: encoder
+        )
+    }
+
+    private func writeSnapshot(
+        _ snapshot: AppSnapshot,
+        comparedTo previousSnapshot: AppSnapshot,
+        scope: PersistenceScope
+    ) throws {
+        try Self.writeSnapshot(
+            snapshot,
+            comparedTo: previousSnapshot,
+            scope: scope,
+            dbQueue: dbQueue,
+            encoder: encoder
+        )
     }
 
     private static func importLegacySnapshotIfNeeded(
@@ -197,24 +254,103 @@ actor AppRepository {
     }
 
     private static func writeSnapshot(_ snapshot: AppSnapshot, dbQueue: DatabaseQueue, encoder: JSONEncoder) throws {
-        try dbQueue.write { db in
-            try syncProjects(snapshot.projects, db: db)
-            try syncTasks(snapshot.tasks, db: db, encoder: encoder)
-            try syncSessions(snapshot.sessions, db: db)
-            try syncInterrupts(snapshot.interrupts, db: db)
-            try syncImportDrafts(snapshot.importDrafts, db: db)
-            try syncImportDraftItems(snapshot.importDraftItems, db: db, encoder: encoder)
+        try writeSnapshot(snapshot, scope: .full, dbQueue: dbQueue, encoder: encoder)
+    }
 
-            let appState = AppStateRecord(
-                selectedTaskID: snapshot.selectedTaskID?.uuidString,
-                lastCelebrationAt: snapshot.lastCelebrationAt?.timeIntervalSince1970,
-                mindMapDataJSON: snapshot.mindMapDocument.dataJSON,
-                mindMapConfigJSON: snapshot.mindMapDocument.configJSON,
-                mindMapLocalConfigJSON: snapshot.mindMapDocument.localConfigJSON,
-                mindMapLanguage: snapshot.mindMapDocument.language,
-                mindMapUpdatedAt: snapshot.mindMapDocument.updatedAt.timeIntervalSince1970
-            )
-            try appState.save(db)
+    private static func writeSnapshot(
+        _ snapshot: AppSnapshot,
+        scope: PersistenceScope,
+        dbQueue: DatabaseQueue,
+        encoder: JSONEncoder
+    ) throws {
+        try dbQueue.write { db in
+            if scope.contains(.projects) {
+                try syncProjects(snapshot.projects, db: db)
+            }
+            if scope.contains(.tasks) {
+                try syncTasks(snapshot.tasks, db: db, encoder: encoder)
+            }
+            if scope.contains(.sessions) {
+                try syncSessions(snapshot.sessions, db: db)
+            }
+            if scope.contains(.interrupts) {
+                try syncInterrupts(snapshot.interrupts, db: db)
+            }
+            if scope.contains(.importDrafts) {
+                try syncImportDrafts(snapshot.importDrafts, db: db)
+            }
+            if scope.contains(.importDraftItems) {
+                try syncImportDraftItems(snapshot.importDraftItems, db: db, encoder: encoder)
+            }
+            if scope.contains(.appState) {
+                let appState = AppStateRecord(
+                    selectedTaskID: snapshot.selectedTaskID?.uuidString,
+                    lastCelebrationAt: snapshot.lastCelebrationAt?.timeIntervalSince1970,
+                    mindMapDataJSON: snapshot.mindMapDocument.dataJSON,
+                    mindMapConfigJSON: snapshot.mindMapDocument.configJSON,
+                    mindMapLocalConfigJSON: snapshot.mindMapDocument.localConfigJSON,
+                    mindMapLanguage: snapshot.mindMapDocument.language,
+                    mindMapUpdatedAt: snapshot.mindMapDocument.updatedAt.timeIntervalSince1970
+                )
+                try appState.save(db)
+            }
+        }
+    }
+
+    private static func writeSnapshot(
+        _ snapshot: AppSnapshot,
+        comparedTo previousSnapshot: AppSnapshot,
+        scope: PersistenceScope,
+        dbQueue: DatabaseQueue,
+        encoder: JSONEncoder
+    ) throws {
+        try dbQueue.write { db in
+            if scope.contains(.projects) {
+                try syncProjects(snapshot.projects, previousProjects: previousSnapshot.projects, db: db)
+            }
+            if scope.contains(.tasks) {
+                try syncTasks(snapshot.tasks, previousTasks: previousSnapshot.tasks, db: db, encoder: encoder)
+            }
+            if scope.contains(.sessions) {
+                try syncSessions(snapshot.sessions, previousSessions: previousSnapshot.sessions, db: db)
+            }
+            if scope.contains(.interrupts) {
+                try syncInterrupts(snapshot.interrupts, previousInterrupts: previousSnapshot.interrupts, db: db)
+            }
+            if scope.contains(.importDrafts) {
+                try syncImportDrafts(snapshot.importDrafts, previousDrafts: previousSnapshot.importDrafts, db: db)
+            }
+            if scope.contains(.importDraftItems) {
+                try syncImportDraftItems(
+                    snapshot.importDraftItems,
+                    previousItems: previousSnapshot.importDraftItems,
+                    db: db,
+                    encoder: encoder
+                )
+            }
+            if scope.contains(.appState) {
+                let appState = AppStateRecord(
+                    selectedTaskID: snapshot.selectedTaskID?.uuidString,
+                    lastCelebrationAt: snapshot.lastCelebrationAt?.timeIntervalSince1970,
+                    mindMapDataJSON: snapshot.mindMapDocument.dataJSON,
+                    mindMapConfigJSON: snapshot.mindMapDocument.configJSON,
+                    mindMapLocalConfigJSON: snapshot.mindMapDocument.localConfigJSON,
+                    mindMapLanguage: snapshot.mindMapDocument.language,
+                    mindMapUpdatedAt: snapshot.mindMapDocument.updatedAt.timeIntervalSince1970
+                )
+                let previousAppState = AppStateRecord(
+                    selectedTaskID: previousSnapshot.selectedTaskID?.uuidString,
+                    lastCelebrationAt: previousSnapshot.lastCelebrationAt?.timeIntervalSince1970,
+                    mindMapDataJSON: previousSnapshot.mindMapDocument.dataJSON,
+                    mindMapConfigJSON: previousSnapshot.mindMapDocument.configJSON,
+                    mindMapLocalConfigJSON: previousSnapshot.mindMapDocument.localConfigJSON,
+                    mindMapLanguage: previousSnapshot.mindMapDocument.language,
+                    mindMapUpdatedAt: previousSnapshot.mindMapDocument.updatedAt.timeIntervalSince1970
+                )
+                if appState != previousAppState {
+                    try appState.save(db)
+                }
+            }
         }
     }
 
@@ -229,6 +365,19 @@ actor AppRepository {
 
         for removedID in existingIDs.subtracting(incomingIDs) {
             _ = try ProjectRecord.deleteOne(db, key: removedID)
+        }
+    }
+
+    private static func syncProjects(_ projects: [Project], previousProjects: [Project], db: Database) throws {
+        let incomingProjects = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0) })
+        let previousProjectsByID = Dictionary(uniqueKeysWithValues: previousProjects.map { ($0.id, $0) })
+
+        for project in projects where previousProjectsByID[project.id] != project {
+            try ProjectRecord(project).save(db)
+        }
+
+        for removedID in Set(previousProjectsByID.keys).subtracting(Set(incomingProjects.keys)) {
+            _ = try ProjectRecord.deleteOne(db, key: removedID.uuidString)
         }
     }
 
@@ -257,6 +406,36 @@ actor AppRepository {
         }
     }
 
+    private static func syncTasks(
+        _ tasks: [Task],
+        previousTasks: [Task],
+        db: Database,
+        encoder: JSONEncoder
+    ) throws {
+        let incomingTasks = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+        let previousTasksByID = Dictionary(uniqueKeysWithValues: previousTasks.map { ($0.id, $0) })
+
+        for task in tasks where previousTasksByID[task.id] != task {
+            var record = try TaskRecord(task, encoder: encoder)
+            record.tombstone = false
+            try record.save(db)
+        }
+
+        let removedIDs = Set(previousTasksByID.keys).subtracting(Set(incomingTasks.keys))
+        guard !removedIDs.isEmpty else { return }
+
+        let now = Date().timeIntervalSince1970
+        for removedID in removedIDs {
+            guard let previousTask = previousTasksByID[removedID] else { continue }
+            var record = try TaskRecord(previousTask, encoder: encoder)
+            record.tombstone = true
+            record.version += 1
+            record.updatedAt = now
+            record.isCurrent = false
+            try record.save(db)
+        }
+    }
+
     private static func syncSessions(_ sessions: [Session], db: Database) throws {
         let incomingIDs = Set(sessions.map(\.id.uuidString))
         let existingIDs = Set(try String.fetchAll(db, sql: "SELECT id FROM \(SessionRecord.databaseTableName)"))
@@ -268,6 +447,19 @@ actor AppRepository {
 
         for removedID in existingIDs.subtracting(incomingIDs) {
             _ = try SessionRecord.deleteOne(db, key: removedID)
+        }
+    }
+
+    private static func syncSessions(_ sessions: [Session], previousSessions: [Session], db: Database) throws {
+        let incomingSessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        let previousSessionsByID = Dictionary(uniqueKeysWithValues: previousSessions.map { ($0.id, $0) })
+
+        for session in sessions where previousSessionsByID[session.id] != session {
+            try SessionRecord(session).save(db)
+        }
+
+        for removedID in Set(previousSessionsByID.keys).subtracting(Set(incomingSessions.keys)) {
+            _ = try SessionRecord.deleteOne(db, key: removedID.uuidString)
         }
     }
 
@@ -285,6 +477,23 @@ actor AppRepository {
         }
     }
 
+    private static func syncInterrupts(
+        _ interrupts: [Interrupt],
+        previousInterrupts: [Interrupt],
+        db: Database
+    ) throws {
+        let incomingInterrupts = Dictionary(uniqueKeysWithValues: interrupts.map { ($0.id, $0) })
+        let previousInterruptsByID = Dictionary(uniqueKeysWithValues: previousInterrupts.map { ($0.id, $0) })
+
+        for interrupt in interrupts where previousInterruptsByID[interrupt.id] != interrupt {
+            try InterruptRecord(interrupt).save(db)
+        }
+
+        for removedID in Set(previousInterruptsByID.keys).subtracting(Set(incomingInterrupts.keys)) {
+            _ = try InterruptRecord.deleteOne(db, key: removedID.uuidString)
+        }
+    }
+
     private static func syncImportDrafts(_ drafts: [ImportDraft], db: Database) throws {
         let incomingIDs = Set(drafts.map(\.id.uuidString))
         let existingIDs = Set(try String.fetchAll(db, sql: "SELECT id FROM \(ImportDraftRecord.databaseTableName)"))
@@ -299,6 +508,19 @@ actor AppRepository {
         }
     }
 
+    private static func syncImportDrafts(_ drafts: [ImportDraft], previousDrafts: [ImportDraft], db: Database) throws {
+        let incomingDrafts = Dictionary(uniqueKeysWithValues: drafts.map { ($0.id, $0) })
+        let previousDraftsByID = Dictionary(uniqueKeysWithValues: previousDrafts.map { ($0.id, $0) })
+
+        for draft in drafts where previousDraftsByID[draft.id] != draft {
+            try ImportDraftRecord(draft).save(db)
+        }
+
+        for removedID in Set(previousDraftsByID.keys).subtracting(Set(incomingDrafts.keys)) {
+            _ = try ImportDraftRecord.deleteOne(db, key: removedID.uuidString)
+        }
+    }
+
     private static func syncImportDraftItems(_ items: [ImportDraftItem], db: Database, encoder: JSONEncoder) throws {
         let incomingIDs = Set(items.map(\.id.uuidString))
         let existingIDs = Set(try String.fetchAll(db, sql: "SELECT id FROM \(ImportDraftItemRecord.databaseTableName)"))
@@ -310,6 +532,24 @@ actor AppRepository {
 
         for removedID in existingIDs.subtracting(incomingIDs) {
             _ = try ImportDraftItemRecord.deleteOne(db, key: removedID)
+        }
+    }
+
+    private static func syncImportDraftItems(
+        _ items: [ImportDraftItem],
+        previousItems: [ImportDraftItem],
+        db: Database,
+        encoder: JSONEncoder
+    ) throws {
+        let incomingItems = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        let previousItemsByID = Dictionary(uniqueKeysWithValues: previousItems.map { ($0.id, $0) })
+
+        for item in items where previousItemsByID[item.id] != item {
+            try ImportDraftItemRecord(item, encoder: encoder).save(db)
+        }
+
+        for removedID in Set(previousItemsByID.keys).subtracting(Set(incomingItems.keys)) {
+            _ = try ImportDraftItemRecord.deleteOne(db, key: removedID.uuidString)
         }
     }
 
@@ -831,7 +1071,7 @@ private struct ImportDraftItemRecord: Codable, FetchableRecord, PersistableRecor
     }
 }
 
-private struct AppStateRecord: Codable, FetchableRecord, PersistableRecord, TableRecord {
+private struct AppStateRecord: Codable, FetchableRecord, PersistableRecord, TableRecord, Equatable {
     static let databaseTableName = "app_state"
 
     var id: Int64 = 1

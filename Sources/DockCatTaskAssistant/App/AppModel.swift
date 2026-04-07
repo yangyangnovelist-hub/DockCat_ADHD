@@ -1,8 +1,6 @@
 import AppKit
 import Foundation
 import Combine
-import AppFlowyDocumentBridge
-import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -18,10 +16,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var localImportRuntimeStatus: String?
     @Published private(set) var localImportRuntimeStatusIsError = false
     @Published private(set) var isPreparingLocalImportRuntime = false
+    @Published private(set) var taskIntakeQueueDepth = 0
+    @Published private(set) var isTaskIntakeBusy = false
 
     private let repository: AppRepository
+    private let persistenceCoordinator: SnapshotPersistenceCoordinator
+    private let taskIntakeLimiter = TaskIntakeLimiter()
     private let appleRemindersBridge: AppleRemindersBridge
-    private var saveTask: _Concurrency.Task<Void, Never>?
     private var inputIdleTask: _Concurrency.Task<Void, Never>?
     private var autosaveTimer: Timer?
     private var lastExternalInputAt: Date?
@@ -37,7 +38,7 @@ final class AppModel: ObservableObject {
             self.withMutableSyncUseCasesState(mutate)
         },
         persist: { [unowned self] event, details in
-            self.persist(event: event, details: details)
+            self.persist(event: event, details: details, scope: .mindMapDomain)
         },
         mirrorImportedItemsBridge: { [appleRemindersBridge] items in
             await appleRemindersBridge.mirrorImportedItems(items)
@@ -57,7 +58,7 @@ final class AppModel: ObservableObject {
             self.syncUseCases.synchronizeMindMapFromTasks(force: force)
         },
         persist: { [unowned self] event, details in
-            self.persist(event: event, details: details)
+            self.persist(event: event, details: details, scope: .taskDomain)
         },
         refreshPetState: { [unowned self] in
             self.refreshPetState()
@@ -84,10 +85,27 @@ final class AppModel: ObservableObject {
             await self.syncUseCases.mirrorImportedItems(items)
         },
         persist: { [unowned self] event, details in
-            self.persist(event: event, details: details)
+            self.persist(event: event, details: details, scope: .importDomain)
         },
         refreshPetState: { [unowned self] in
             self.refreshPetState()
+        }
+    )
+    private lazy var importRuntimeCoordinator = ImportRuntimeCoordinator(
+        getState: { [unowned self] in
+            ImportRuntimeCoordinator.State(
+                snapshot: self.snapshot,
+                importRuntimeNote: self.importRuntimeNote,
+                localImportRuntimeStatus: self.localImportRuntimeStatus,
+                localImportRuntimeStatusIsError: self.localImportRuntimeStatusIsError,
+                isPreparingLocalImportRuntime: self.isPreparingLocalImportRuntime
+            )
+        },
+        mutateState: { [unowned self] mutate in
+            self.withMutableImportRuntimeState(mutate)
+        },
+        persist: { [unowned self] event, details in
+            self.persist(event: event, details: details, scope: .preferencesDomain)
         }
     )
 
@@ -96,6 +114,7 @@ final class AppModel: ObservableObject {
         appleRemindersBridge: AppleRemindersBridge = AppleRemindersBridge()
     ) {
         self.repository = repository
+        self.persistenceCoordinator = SnapshotPersistenceCoordinator(repository: repository)
         self.appleRemindersBridge = appleRemindersBridge
         let loadedSnapshot = AppSnapshot.empty
         self.snapshot = loadedSnapshot
@@ -109,10 +128,10 @@ final class AppModel: ObservableObject {
                 self.snapshot = sanitizedSnapshot
                 let didReconcileMindMap = self.syncUseCases.reconcileMindMapAndTasksOnRestore()
                 self.importText = sanitizedSnapshot.importDrafts.last?.rawText ?? Self.seedImportText
-                self.refreshPetState(shouldPersist: false)
+                self.refreshPetState()
                 self.startAutosaveTimer()
                 if didSanitizeSnapshot || didReconcileMindMap {
-                    self.scheduleSave()
+                    self.scheduleSave(scope: .full)
                 }
                 _Concurrency.Task { [weak self] in
                     await self?.finishLocalImportBootstrap()
@@ -136,10 +155,6 @@ final class AppModel: ObservableObject {
     var todayStats: DailyStats { StatsAggregator.todayStats(snapshot: snapshot) }
     var latestDraft: ImportDraft? { snapshot.importDrafts.last }
     var mindMapDocument: MindMapDocument { snapshot.mindMapDocument }
-    var shouldPetStayExpanded: Bool {
-        !snapshot.preferences.lowDistractionMode || petState == .focus || petState == .alert || petState == .celebrate
-    }
-
     var latestDraftItems: [ImportDraftItem] {
         guard let latestDraft else { return [] }
         let grouped = Dictionary(grouping: snapshot.importDraftItems.filter { $0.draftID == latestDraft.id }) { $0.parentItemID }
@@ -153,10 +168,6 @@ final class AppModel: ObservableObject {
 
         roots.forEach(walk)
         return ordered
-    }
-
-    var latestImportDocument: FlowDocument {
-        ImportDocumentBuilder.build(draft: latestDraft, items: latestDraftItems)
     }
 
     func bootstrapIfNeeded() {
@@ -182,10 +193,6 @@ final class AppModel: ObservableObject {
         snapshot.tasks.first { $0.id == id }
     }
 
-    func draftItem(id: UUID?) -> ImportDraftItem? {
-        snapshot.importDraftItems.first { $0.id == id }
-    }
-
     func isBackgroundTask(_ taskID: UUID?) -> Bool {
         guard let taskID else { return false }
         return backgroundTaskIDs.contains(taskID)
@@ -193,11 +200,6 @@ final class AppModel: ObservableObject {
 
     func childTaskCount(for taskID: UUID) -> Int {
         snapshot.tasks.filter { $0.parentTaskID == taskID }.count
-    }
-
-    func projectName(for taskID: UUID?) -> String? {
-        guard let task = task(id: taskID), let projectID = task.projectID else { return nil }
-        return snapshot.projects.first(where: { $0.id == projectID })?.name
     }
 
     func buildTaskDraft(for taskID: UUID) -> TaskSnapshotDraft? {
@@ -214,22 +216,6 @@ final class AppModel: ObservableObject {
             hasDueDate: task.dueAt != nil,
             tagsText: task.tags.joined(separator: ", "),
             smartEntries: task.smartEntries.mergedWithDefaults()
-        )
-    }
-
-    func buildDraftItemDraft(for draftItemID: UUID) -> DraftItemSnapshotDraft? {
-        guard let item = draftItem(id: draftItemID) else { return nil }
-        return DraftItemSnapshotDraft(
-            title: item.proposedTitle,
-            notes: item.proposedNotes ?? "",
-            urgencyValue: item.proposedUrgencyValue ?? PriorityVector.value(from: item.proposedUrgencyScore ?? 1),
-            importanceValue: item.proposedImportanceValue ?? PriorityVector.value(from: item.proposedImportanceScore ?? 1),
-            quadrant: item.proposedQuadrant ?? .notUrgentImportant,
-            dueAt: item.proposedDueAt ?? Date(),
-            hasDueDate: item.proposedDueAt != nil,
-            tagsText: item.proposedTags.joined(separator: ", "),
-            smartEntries: item.smartEntries.mergedWithDefaults(),
-            isAccepted: item.isAccepted
         )
     }
 
@@ -351,6 +337,22 @@ final class AppModel: ObservableObject {
     }
 
     func createDraftFromImportText(sourceType: ImportSourceType = .text) async {
+        let trimmed = importText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let admission = taskIntakeLimiter.beginParse(
+            textLength: trimmed.count,
+            draftItemCount: snapshot.importDraftItems.count,
+            currentTaskCount: snapshot.tasks.count
+        )
+        applyTaskIntakeAdmission(admission)
+        guard admission.admitted else {
+            importErrorMessage = admission.message
+            persist(event: "task_intake.rejected", details: admission.message ?? "parse")
+            return
+        }
+
+        defer {
+            applyTaskIntakeAdmission(taskIntakeLimiter.finish())
+        }
         await importUseCases.createDraftFromImportText(sourceType: sourceType)
     }
 
@@ -371,6 +373,21 @@ final class AppModel: ObservableObject {
     }
 
     func commitLatestDraft() {
+        let acceptedItems = latestDraftItems.filter(\.isAccepted)
+        let admission = taskIntakeLimiter.beginCommit(
+            acceptedItemCount: acceptedItems.count,
+            currentTaskCount: snapshot.tasks.count
+        )
+        applyTaskIntakeAdmission(admission)
+        guard admission.admitted else {
+            importErrorMessage = admission.message
+            persist(event: "task_intake.rejected", details: admission.message ?? "commit")
+            return
+        }
+
+        defer {
+            applyTaskIntakeAdmission(taskIntakeLimiter.finish())
+        }
         importUseCases.commitLatestDraft()
     }
 
@@ -390,198 +407,78 @@ final class AppModel: ObservableObject {
 
     func setPetHovering(_ hovering: Bool) {
         isPetHovering = hovering
-        refreshPetState(shouldPersist: false)
+        refreshPetState()
     }
 
     func noteExternalInput(at date: Date = .now) {
         lastExternalInputAt = date
-        refreshPetState(shouldPersist: false)
+        refreshPetState()
 
         inputIdleTask?.cancel()
         inputIdleTask = _Concurrency.Task { [weak self] in
             try? await _Concurrency.Task.sleep(for: .milliseconds(1600))
             await MainActor.run {
                 guard let self, self.lastExternalInputAt == date else { return }
-                self.refreshPetState(shouldPersist: false)
+                self.refreshPetState()
             }
         }
     }
 
     func toggleLowDistractionMode() {
         snapshot.preferences.lowDistractionMode.toggle()
-        persist(event: "preferences.low_distraction", details: "\(snapshot.preferences.lowDistractionMode)")
+        persist(event: "preferences.low_distraction", details: "\(snapshot.preferences.lowDistractionMode)", scope: .preferencesDomain)
         refreshPetState()
     }
 
     func updatePetPlacement(edge: PetEdge, centerY: CGFloat) {
         snapshot.preferences.petEdge = edge
         snapshot.preferences.petOffsetY = centerY
-        persist(event: "preferences.pet_placement", details: "\(edge.rawValue):\(centerY)")
+        persist(event: "preferences.pet_placement", details: "\(edge.rawValue):\(centerY)", scope: .preferencesDomain)
         refreshPetState()
     }
 
     func updateImportAnalysisProvider(_ provider: ImportAnalysisProvider) {
-        snapshot.preferences.importAnalysis.provider = provider
-        persist(event: "preferences.import_analysis.provider", details: provider.rawValue)
-        if provider == .ollama {
-            _Concurrency.Task { [weak self] in
-                await self?.autoconfigureLocalImportModelIfNeeded()
-                await self?.prepareEmbeddedImportRuntimeIfNeeded()
-            }
-        }
+        importRuntimeCoordinator.updateImportAnalysisProvider(provider)
     }
 
     func updateImportAnalysisBaseURL(_ baseURL: String) {
-        snapshot.preferences.importAnalysis.baseURL = baseURL
-        persist(event: "preferences.import_analysis.base_url", details: baseURL)
+        importRuntimeCoordinator.updateImportAnalysisBaseURL(baseURL)
     }
 
     func updateImportAnalysisModelName(_ modelName: String) {
-        snapshot.preferences.importAnalysis.modelName = modelName
-        persist(event: "preferences.import_analysis.model", details: modelName)
+        importRuntimeCoordinator.updateImportAnalysisModelName(modelName)
     }
 
     func updateImportAnalysisModelFilePath(_ modelFilePath: String) {
-        snapshot.preferences.importAnalysis.modelFilePath = modelFilePath
-        persist(event: "preferences.import_analysis.model_file", details: modelFilePath)
-
-        if snapshot.preferences.importAnalysis.provider == .ollama {
-            _Concurrency.Task { [weak self] in
-                await self?.prepareEmbeddedImportRuntimeIfNeeded()
-            }
-        }
+        importRuntimeCoordinator.updateImportAnalysisModelFilePath(modelFilePath)
     }
 
     func updateImportAnalysisAPIKey(_ apiKey: String) {
-        snapshot.preferences.importAnalysis.apiKey = apiKey
-        persist(event: "preferences.import_analysis.api_key", details: apiKey.isEmpty ? "empty" : "set")
+        importRuntimeCoordinator.updateImportAnalysisAPIKey(apiKey)
     }
 
     func chooseImportAnalysisModelFile() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "选择 GGUF"
-        panel.title = "选择本地 GGUF 模型文件"
-        panel.message = "DockCat 会记住这份 GGUF 文件路径，之后直接用于任务分析。"
-        if let ggufType = UTType(filenameExtension: "gguf") {
-            panel.allowedContentTypes = [ggufType]
-        }
-
-        guard panel.runModal() == .OK, let selectedURL = panel.url else {
-            return
-        }
-
-        snapshot.preferences.importAnalysis.provider = .ollama
-        snapshot.preferences.importAnalysis.baseURL = ""
-        snapshot.preferences.importAnalysis.apiKey = ""
-        snapshot.preferences.importAnalysis.modelFilePath = selectedURL.path
-        if snapshot.preferences.importAnalysis.trimmedModelName.isEmpty {
-            snapshot.preferences.importAnalysis.modelName = selectedURL.deletingPathExtension().lastPathComponent
-        }
-        persist(event: "preferences.import_analysis.model_file.picked", details: selectedURL.path)
-
-        _Concurrency.Task { [weak self] in
-            await self?.prepareEmbeddedImportRuntimeIfNeeded()
-        }
+        importRuntimeCoordinator.chooseImportAnalysisModelFile()
     }
 
     func autodetectLocalImportModel() async {
-        guard let selection = await OllamaCatalog.shared.preferredTaskImportSelection() else {
-            localImportRuntimeStatus = "未在 ~/.ollama/models 中发现可用的 GGUF 模型"
-            localImportRuntimeStatusIsError = true
-            return
-        }
-
-        snapshot.preferences.importAnalysis.provider = .ollama
-        snapshot.preferences.importAnalysis.baseURL = ""
-        snapshot.preferences.importAnalysis.modelName = selection.name
-        snapshot.preferences.importAnalysis.modelFilePath = selection.fileURL.path
-        snapshot.preferences.importAnalysis.apiKey = ""
-        importRuntimeNote = "已连接本机 GGUF 模型：\(selection.name)"
-        localImportRuntimeStatus = "已锁定模型文件：\(selection.fileURL.lastPathComponent)"
-        localImportRuntimeStatusIsError = false
-        persist(event: "preferences.import_analysis.autoconfigured", details: selection.name)
-
-        await prepareEmbeddedImportRuntimeIfNeeded()
+        await importRuntimeCoordinator.autodetectLocalImportModel()
     }
 
     func prepareEmbeddedImportRuntimeIfNeeded() async {
-        let preference = snapshot.preferences.importAnalysis
-        guard preference.provider == .ollama else {
-            localImportRuntimeStatus = nil
-            localImportRuntimeStatusIsError = false
-            return
-        }
-
-        let modelPath = preference.trimmedModelFilePath
-        guard !modelPath.isEmpty else {
-            localImportRuntimeStatus = "请选择 GGUF 文件，或使用自动检测写入固定路径"
-            localImportRuntimeStatusIsError = true
-            return
-        }
-
-        isPreparingLocalImportRuntime = true
-        localImportRuntimeStatus = "正在准备内嵌运行时…"
-        localImportRuntimeStatusIsError = false
-
-        do {
-            let cliURL = try await EmbeddedLlamaRuntime.shared.prepareRuntime()
-            localImportRuntimeStatus = "内嵌运行时已就绪：\(cliURL.lastPathComponent) · 模型 \(URL(fileURLWithPath: modelPath).lastPathComponent)"
-            localImportRuntimeStatusIsError = false
-        } catch {
-            localImportRuntimeStatus = "内嵌运行时准备失败：\(error.localizedDescription)"
-            localImportRuntimeStatusIsError = true
-        }
-
-        isPreparingLocalImportRuntime = false
+        await importRuntimeCoordinator.prepareEmbeddedImportRuntimeIfNeeded()
     }
 
     private func finishLocalImportBootstrap() async {
-        await autoconfigureLocalImportModelIfNeeded()
-        await prepareEmbeddedImportRuntimeIfNeeded()
+        await importRuntimeCoordinator.finishLocalImportBootstrap()
     }
 
-    private func autoconfigureLocalImportModelIfNeeded() async {
-        let currentPreference = await MainActor.run { snapshot.preferences.importAnalysis }
-        guard currentPreference.provider == .disabled
-            || (currentPreference.trimmedModelName.isEmpty && currentPreference.trimmedModelFilePath.isEmpty) else {
-            return
-        }
-
-        guard let selection = await OllamaCatalog.shared.preferredTaskImportSelection() else {
-            return
-        }
-
-        await MainActor.run {
-            let latestPreference = snapshot.preferences.importAnalysis
-            guard latestPreference.provider == .disabled
-                || (latestPreference.trimmedModelName.isEmpty && latestPreference.trimmedModelFilePath.isEmpty) else {
-                return
-            }
-
-            snapshot.preferences.importAnalysis.provider = .ollama
-            snapshot.preferences.importAnalysis.baseURL = ""
-            snapshot.preferences.importAnalysis.modelName = selection.name
-            snapshot.preferences.importAnalysis.modelFilePath = selection.fileURL.path
-            snapshot.preferences.importAnalysis.apiKey = ""
-            importRuntimeNote = "已自动连接本机 GGUF 模型：\(selection.name)"
-            localImportRuntimeStatus = "已锁定模型文件：\(selection.fileURL.lastPathComponent)"
-            localImportRuntimeStatusIsError = false
-            persist(event: "preferences.import_analysis.autoconfigured", details: selection.name)
-        }
-    }
-
-    private func refreshPetState(shouldPersist: Bool = true) {
+    private func refreshPetState() {
         petState = PetStateMachine.resolve(
             snapshot: snapshot,
             isHovering: isPetHovering,
             lastExternalInputAt: lastExternalInputAt
         )
-        if shouldPersist {
-            scheduleSave()
-        }
     }
 
     private func withMutableTaskUseCasesState(_ mutate: (inout TaskUseCases.State) -> Void) {
@@ -622,23 +519,44 @@ final class AppModel: ObservableObject {
         priorityPromptTaskID = state.priorityPromptTaskID
     }
 
-    private func persist(event: String, details: String) {
-        scheduleSave()
+    private func withMutableImportRuntimeState(_ mutate: (inout ImportRuntimeCoordinator.State) -> Void) {
+        var state = ImportRuntimeCoordinator.State(
+            snapshot: snapshot,
+            importRuntimeNote: importRuntimeNote,
+            localImportRuntimeStatus: localImportRuntimeStatus,
+            localImportRuntimeStatusIsError: localImportRuntimeStatusIsError,
+            isPreparingLocalImportRuntime: isPreparingLocalImportRuntime
+        )
+        mutate(&state)
+        snapshot = state.snapshot
+        importRuntimeNote = state.importRuntimeNote
+        localImportRuntimeStatus = state.localImportRuntimeStatus
+        localImportRuntimeStatusIsError = state.localImportRuntimeStatusIsError
+        isPreparingLocalImportRuntime = state.isPreparingLocalImportRuntime
+    }
+
+    private func applyTaskIntakeAdmission(_ admission: TaskIntakeLimiter.Admission) {
+        taskIntakeQueueDepth = admission.queueDepth
+        isTaskIntakeBusy = admission.isBusy
+    }
+
+    private func persist(event: String, details: String, scope: PersistenceScope = []) {
+        if !scope.isEmpty {
+            scheduleSave(scope: scope)
+        }
         let repository = repository
         _Concurrency.Task(priority: .utility) {
             await repository.appendEvent(event, details: details)
         }
     }
 
-    private func scheduleSave() {
+    private func scheduleSave(scope: PersistenceScope = .full) {
         let snapshot = snapshot
-        let repository = repository
+        let persistenceCoordinator = persistenceCoordinator
         saveGeneration += 1
         let generation = saveGeneration
-        saveTask?.cancel()
-        saveTask = _Concurrency.Task(priority: .utility) {
-            guard !_Concurrency.Task.isCancelled else { return }
-            await repository.saveSnapshot(snapshot, generation: generation)
+        _Concurrency.Task(priority: .utility) {
+            await persistenceCoordinator.scheduleSave(snapshot: snapshot, generation: generation, scope: scope)
         }
     }
 

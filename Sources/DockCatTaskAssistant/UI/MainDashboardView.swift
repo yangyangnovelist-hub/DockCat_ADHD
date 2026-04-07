@@ -415,6 +415,11 @@ struct MainDashboardView: View {
                         if microphoneCapture.isRecording {
                             StatusBadge(title: "录音中", color: .red)
                         }
+
+                        StatusBadge(
+                            title: "入口队列 \(appModel.taskIntakeQueueDepth)",
+                            color: appModel.isTaskIntakeBusy ? TaskBoardPalette.accentWarm : TaskBoardPalette.quiet
+                        )
                     }
                 } else {
                     HStack(spacing: 8) {
@@ -430,6 +435,11 @@ struct MainDashboardView: View {
                         if microphoneCapture.isRecording {
                             StatusBadge(title: "录音中", color: .red)
                         }
+
+                        StatusBadge(
+                            title: "入口队列 \(appModel.taskIntakeQueueDepth)",
+                            color: appModel.isTaskIntakeBusy ? TaskBoardPalette.accentWarm : TaskBoardPalette.quiet
+                        )
                     }
                 }
             }
@@ -600,7 +610,7 @@ struct MainDashboardView: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(TaskBoardPalette.accentWarm)
-        .disabled(appModel.isImportParsing || appModel.importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(appModel.isTaskIntakeBusy || appModel.isImportParsing || appModel.importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private var importCommitButton: some View {
@@ -609,7 +619,7 @@ struct MainDashboardView: View {
             selectedTaskID = appModel.currentTask?.id ?? appModel.tasks.first?.id
         }
         .buttonStyle(.bordered)
-        .disabled(appModel.latestDraftItems.isEmpty)
+        .disabled(appModel.isTaskIntakeBusy || appModel.latestDraftItems.isEmpty)
     }
 
     private var voiceImportButton: some View {
@@ -624,6 +634,7 @@ struct MainDashboardView: View {
         }
         .buttonStyle(.bordered)
         .tint(microphoneCapture.isRecording ? .red.opacity(0.86) : TaskBoardPalette.accent)
+        .disabled(appModel.isTaskIntakeBusy && !microphoneCapture.isRecording)
     }
 
     private func handleQuickVoiceCapture() {

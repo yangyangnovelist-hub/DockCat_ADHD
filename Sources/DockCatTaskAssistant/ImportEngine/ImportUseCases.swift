@@ -235,12 +235,9 @@ final class ImportUseCases {
                 state.snapshot.tasks.append(task)
             }
 
-            state.snapshot.importDrafts = state.snapshot.importDrafts.map { draft in
-                guard draft.id == latestDraft.id else { return draft }
-                var updated = draft
-                updated.parseStatus = .accepted
-                updated.updatedAt = Date()
-                return updated
+            if let draftIndex = state.snapshot.importDrafts.firstIndex(where: { $0.id == latestDraft.id }) {
+                state.snapshot.importDrafts[draftIndex].parseStatus = .accepted
+                state.snapshot.importDrafts[draftIndex].updatedAt = Date()
             }
 
             if state.snapshot.selectedTaskID == nil, let firstTaskID = createdTaskIDsByDraftItemID.values.first {
@@ -273,12 +270,8 @@ final class ImportUseCases {
     }
 
     private func mutateDraftItem(in snapshot: inout AppSnapshot, id: UUID, _ mutate: (inout ImportDraftItem) -> Void) {
-        snapshot.importDraftItems = snapshot.importDraftItems.map { item in
-            guard item.id == id else { return item }
-            var updated = item
-            mutate(&updated)
-            return updated
-        }
+        guard let index = snapshot.importDraftItems.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&snapshot.importDraftItems[index])
     }
 
     private func ensureProjectID(

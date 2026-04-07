@@ -1,6 +1,8 @@
 import Foundation
 
 enum MindMapTaskSynchronizer {
+    private static let htmlTagRegex = try? NSRegularExpression(pattern: "<[^>]+>", options: [])
+
     struct SyncResult {
         let tasks: [Task]
         let normalizedDataJSON: String
@@ -100,8 +102,7 @@ enum MindMapTaskSynchronizer {
         func makeNode(_ task: Task) -> [String: Any] {
             var node = existingNodesByTaskID[task.id] ?? [:]
             var data = node["data"] as? [String: Any] ?? [:]
-            let existingText = (data["text"] as? String)?
-                .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            let existingText = stripHTMLTags(from: data["text"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if existingText != task.title {
                 data["text"] = task.title
@@ -264,8 +265,7 @@ enum MindMapTaskSynchronizer {
 
     private static func normalizedNodeText(from data: [String: Any]) -> String {
         let raw = (data["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let stripped = raw?
-            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        let stripped = stripHTMLTags(from: raw)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return (stripped?.isEmpty == false ? stripped : nil) ?? "新节点"
     }
@@ -303,5 +303,12 @@ enum MindMapTaskSynchronizer {
             return nil
         }
         return string
+    }
+
+    private static func stripHTMLTags(from text: String?) -> String? {
+        guard let text else { return nil }
+        guard let htmlTagRegex else { return text }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return htmlTagRegex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: "")
     }
 }

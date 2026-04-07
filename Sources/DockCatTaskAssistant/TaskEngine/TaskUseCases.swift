@@ -134,19 +134,17 @@ final class TaskUseCases {
     func setCurrentTask(id: UUID) {
         mutateState { state in
             state.snapshot.selectedTaskID = id
-            state.snapshot.tasks = state.snapshot.tasks.map { task in
-                var updated = task
-                let newIsCurrent = updated.id == id
-                let isCurrentChanged = updated.isCurrent != newIsCurrent
-                let statusChanged = updated.id == id && updated.status == .done
-                updated.isCurrent = newIsCurrent
+            for index in state.snapshot.tasks.indices {
+                let newIsCurrent = state.snapshot.tasks[index].id == id
+                let isCurrentChanged = state.snapshot.tasks[index].isCurrent != newIsCurrent
+                let statusChanged = state.snapshot.tasks[index].id == id && state.snapshot.tasks[index].status == .done
+                state.snapshot.tasks[index].isCurrent = newIsCurrent
                 if statusChanged {
-                    updated.status = .todo
+                    state.snapshot.tasks[index].status = .todo
                 }
                 if isCurrentChanged || statusChanged {
-                    updated.touch()
+                    state.snapshot.tasks[index].touch()
                 }
-                return updated
             }
         }
 
@@ -363,35 +361,31 @@ final class TaskUseCases {
                 : snapshot.selectedTaskID)
 
         mutateState { state in
-            state.snapshot.tasks = state.snapshot.tasks.map { task in
-                guard task.id == taskID else {
-                    guard isSelectedTask || resolvedPreferredTaskID != nil else { return task }
-                    var updated = task
-                    updated.isCurrent = task.id == nextFocusTaskID
-                    if updated.isCurrent != task.isCurrent {
-                        updated.touch()
-                    }
-                    return updated
+            for index in state.snapshot.tasks.indices {
+                if state.snapshot.tasks[index].id == taskID {
+                    state.snapshot.tasks[index].status = .done
+                    state.snapshot.tasks[index].completedAt = now
+                    state.snapshot.tasks[index].isCurrent = false
+                    state.snapshot.tasks[index].touch()
+                    continue
                 }
-                var updated = task
-                updated.status = .done
-                updated.completedAt = now
-                updated.isCurrent = false
-                updated.touch()
-                return updated
+
+                guard isSelectedTask || resolvedPreferredTaskID != nil else { continue }
+                let shouldBeCurrent = state.snapshot.tasks[index].id == nextFocusTaskID
+                if state.snapshot.tasks[index].isCurrent != shouldBeCurrent {
+                    state.snapshot.tasks[index].isCurrent = shouldBeCurrent
+                    state.snapshot.tasks[index].touch()
+                }
             }
 
-            let childIDs = state.snapshot.tasks
+            let childIDs = Set(state.snapshot.tasks
                 .filter { $0.parentTaskID == taskID && $0.status != .archived }
-                .map(\.id)
+                .map(\.id))
             if !childIDs.isEmpty {
-                state.snapshot.tasks = state.snapshot.tasks.map { task in
-                    guard childIDs.contains(task.id) else { return task }
-                    var updated = task
-                    updated.status = .archived
-                    updated.isCurrent = false
-                    updated.touch()
-                    return updated
+                for index in state.snapshot.tasks.indices where childIDs.contains(state.snapshot.tasks[index].id) {
+                    state.snapshot.tasks[index].status = .archived
+                    state.snapshot.tasks[index].isCurrent = false
+                    state.snapshot.tasks[index].touch()
                 }
             }
 
@@ -431,25 +425,21 @@ final class TaskUseCases {
             : snapshot.selectedTaskID
 
         mutateState { state in
-            state.snapshot.tasks = state.snapshot.tasks.map { existingTask in
-                guard existingTask.id == taskID else { return existingTask }
-                var updated = existingTask
-                updated.status = .doing
-                updated.completedAt = nil
-                updated.touch()
-                return updated
+            self.mutateTask(in: &state.snapshot, id: taskID) { task in
+                task.status = .doing
+                task.completedAt = nil
+                task.touch()
             }
             self.setBackgroundState(for: taskID, enabled: true, in: &state.snapshot)
 
             if isSelectedTask, let nextFocusTaskID, nextFocusTaskID != taskID {
                 state.snapshot.selectedTaskID = nextFocusTaskID
-                state.snapshot.tasks = state.snapshot.tasks.map { existingTask in
-                    var updated = existingTask
-                    updated.isCurrent = existingTask.id == nextFocusTaskID
-                    if updated.isCurrent != existingTask.isCurrent {
-                        updated.touch()
+                for index in state.snapshot.tasks.indices {
+                    let shouldBeCurrent = state.snapshot.tasks[index].id == nextFocusTaskID
+                    if state.snapshot.tasks[index].isCurrent != shouldBeCurrent {
+                        state.snapshot.tasks[index].isCurrent = shouldBeCurrent
+                        state.snapshot.tasks[index].touch()
                     }
-                    return updated
                 }
             }
         }
@@ -474,12 +464,8 @@ final class TaskUseCases {
     }
 
     private func mutateTask(in snapshot: inout AppSnapshot, id: UUID, _ mutate: (inout Task) -> Void) {
-        snapshot.tasks = snapshot.tasks.map { task in
-            guard task.id == id else { return task }
-            var updated = task
-            mutate(&updated)
-            return updated
-        }
+        guard let index = snapshot.tasks.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&snapshot.tasks[index])
     }
 
     private func setBackgroundState(for taskID: UUID, enabled: Bool, in snapshot: inout AppSnapshot) {

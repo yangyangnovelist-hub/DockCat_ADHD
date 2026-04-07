@@ -1,0 +1,22 @@
+name: Performance Baseline
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  perf-baseline:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Run persistence correctness harness
+        run: ./scripts/perf/run_correctness_harness.sh
+
+      - name: Run microbenchmarks
+        run: ./scripts/perf/run_microbenchmarks.sh --enforce

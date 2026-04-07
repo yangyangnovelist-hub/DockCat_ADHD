@@ -108,6 +108,17 @@ final class SyncUseCases {
     @discardableResult
     func synchronizeMindMapFromTasks(force: Bool = false) -> Bool {
         let state = getState()
+        let signpost = PerformanceTrace.begin(
+            "synchronizeMindMapFromTasks",
+            details: "tasks=\(state.snapshot.tasks.count) force=\(force)"
+        )
+        defer {
+            PerformanceTrace.end(
+                "synchronizeMindMapFromTasks",
+                state: signpost,
+                details: "tasks=\(state.snapshot.tasks.count) force=\(force)"
+            )
+        }
         let nextDataJSON = MindMapTaskSynchronizer.makeMindMapDataJSON(
             from: state.snapshot.tasks,
             existingDataJSON: state.snapshot.mindMapDocument.dataJSON
@@ -171,10 +182,8 @@ final class SyncUseCases {
             ?? fallbackSelectedTaskID
 
         snapshot.selectedTaskID = selectedTaskID
-        snapshot.tasks = snapshot.tasks.map { task in
-            var updated = task
-            updated.isCurrent = task.id == selectedTaskID
-            return updated
+        for index in snapshot.tasks.indices {
+            snapshot.tasks[index].isCurrent = snapshot.tasks[index].id == selectedTaskID
         }
     }
 
