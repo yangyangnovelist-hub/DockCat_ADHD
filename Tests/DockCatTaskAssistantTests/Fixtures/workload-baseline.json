@@ -1,0 +1,21 @@
+{
+  "allowed_regression_percent": 100,
+  "scenarios": {
+    "cold_restore_snapshot": {
+      "median_ms": 1945.594,
+      "min_throughput_per_second": 4.0
+    },
+    "debounced_snapshot_burst": {
+      "median_ms": 773.761,
+      "min_throughput_per_second": 100.0
+    },
+    "large_import_commit": {
+      "median_ms": 393.180,
+      "min_throughput_per_second": 600.0
+    },
+    "rapid_task_edit_burst": {
+      "median_ms": 7111.011,
+      "min_throughput_per_second": 10.0
+    }
+  }
+}

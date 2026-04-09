@@ -137,12 +137,13 @@ struct MindMapWebView: NSViewRepresentable {
                 // 回显代次 < 当前推送代次：这是过期推送的回显（如启动时空数据的回显），丢弃
                 if echoGeneration < pushGeneration { return }
                 if let payload = body["payload"], let json = Self.jsonString(from: payload) {
+                    let payloadHasStableTaskIDs = MindMapTaskSynchronizer.hasStableTaskIDs(in: json)
                     let tasksBefore = appModel.snapshot.tasks
                     appModel.updateMindMapDocument(dataJSON: json)
                     let tasksAfter = appModel.snapshot.tasks
-                    // 任务有实质变化（新增/删除/修改）时，允许回推归一化数据（含 taskId）给 WebView；
-                    // 纯 JSON 序列化差异时，同步 lastRenderedDocument 阻止无谓重推
-                    if tasksBefore == tasksAfter {
+                    // 已有稳定 taskId 的脑图编辑，Web 端已经拿着最新内容，不需要再整图 setData，
+                    // 否则会导致视图重新布局、位置跳动。只有新节点还缺少稳定 taskId 时，才允许回推归一化数据。
+                    if tasksBefore == tasksAfter || payloadHasStableTaskIDs {
                         lastRenderedDocument = appModel.mindMapDocument
                     }
                 }

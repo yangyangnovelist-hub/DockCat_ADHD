@@ -274,7 +274,10 @@ struct MainDashboardView: View {
 
             LazyVGrid(columns: metricColumns, spacing: 10) {
                 metricCard(title: "已完成", value: "\(appModel.todayStats.completedCount)")
-                metricCard(title: "中断次数", value: "\(appModel.todayStats.interruptionCount)")
+                metricCard(
+                    title: "后台进行中",
+                    value: "\(appModel.backgroundTasks.filter { $0.status == .doing }.count)"
+                )
                 metricCard(title: "待处理", value: "\(appModel.tasks.filter { $0.status != .done && $0.status != .archived }.count)")
             }
 
@@ -335,16 +338,11 @@ struct MainDashboardView: View {
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
-                    primaryStartButton
-                    pauseCurrentTaskButton
                     completeCurrentTaskButton
                     backgroundCurrentTaskButton
                 }
 
                 VStack(spacing: 8) {
-                    primaryStartButton.frame(maxWidth: .infinity)
-                    pauseCurrentTaskButton
-                        .frame(maxWidth: .infinity)
                     completeCurrentTaskButton
                         .frame(maxWidth: .infinity)
                     backgroundCurrentTaskButton
@@ -417,6 +415,11 @@ struct MainDashboardView: View {
                         if microphoneCapture.isRecording {
                             StatusBadge(title: "录音中", color: .red)
                         }
+
+                        StatusBadge(
+                            title: "入口队列 \(appModel.taskIntakeQueueDepth)",
+                            color: appModel.isTaskIntakeBusy ? TaskBoardPalette.accentWarm : TaskBoardPalette.quiet
+                        )
                     }
                 } else {
                     HStack(spacing: 8) {
@@ -432,6 +435,11 @@ struct MainDashboardView: View {
                         if microphoneCapture.isRecording {
                             StatusBadge(title: "录音中", color: .red)
                         }
+
+                        StatusBadge(
+                            title: "入口队列 \(appModel.taskIntakeQueueDepth)",
+                            color: appModel.isTaskIntakeBusy ? TaskBoardPalette.accentWarm : TaskBoardPalette.quiet
+                        )
                     }
                 }
             }
@@ -440,6 +448,20 @@ struct MainDashboardView: View {
                 Text(statusMessage)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(microphoneCapture.isRecording ? .red.opacity(0.82) : .black.opacity(0.56))
+            }
+
+            if let runtimeNote = appModel.importRuntimeNote?.nilIfEmpty {
+                Text(runtimeNote)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.black.opacity(0.56))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let errorMessage = appModel.importErrorMessage?.nilIfEmpty {
+                Text(errorMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.red.opacity(0.82))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -461,27 +483,6 @@ struct MainDashboardView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(TaskBoardPalette.canvas.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private var primaryStartButton: some View {
-        Menu {
-            Button("正向计时开始") {
-                appModel.startCurrentTask(timerMode: .countUp)
-            }
-            Button("倒计时开始") {
-                appModel.startCurrentTask(timerMode: .countdown)
-            }
-            Divider()
-            Button("不计时开始") {
-                appModel.startCurrentTask(timerMode: .untimed)
-            }
-        } label: {
-            Text("开始")
-        }
-    }
-
-    private var pauseCurrentTaskButton: some View {
-        Button("暂停") { appModel.pauseCurrentTask() }
     }
 
     private var completeCurrentTaskButton: some View {
@@ -571,50 +572,17 @@ struct MainDashboardView: View {
                 color: currentTask.status == .doing ? TaskBoardPalette.accent : TaskBoardPalette.accentWarm
             )
             StatusBadge(title: currentTask.quadrant?.title ?? "无", color: TaskBoardPalette.accentWarm)
-            if let timerStatus = timerStatusBadge(for: currentTask) {
-                StatusBadge(title: timerStatus.title, color: timerStatus.color)
+            if appModel.isBackgroundTask(currentTask.id) {
+                StatusBadge(title: "后台运行", color: TaskBoardPalette.quiet)
             }
         }
     }
 
     @ViewBuilder
     private var petStateBadges: some View {
-        if let currentTask = appModel.currentTask,
-           let session = appModel.activeSession,
-           session.taskID == currentTask.id {
-            StatusBadge(
-                title: activeTimerDetailText(for: session),
-                color: TaskBoardPalette.accent
-            )
-        }
         let backgroundCount = appModel.backgroundTasks.filter { $0.status == .doing && $0.id != appModel.currentTask?.id }.count
         if backgroundCount > 0 {
             StatusBadge(title: "\(backgroundCount) 个后台进行中", color: TaskBoardPalette.quiet)
-        }
-    }
-
-    private func timerStatusBadge(for task: Task) -> (title: String, color: Color)? {
-        if let session = appModel.activeSession, session.taskID == task.id {
-            return (session.timerMode.title, TaskBoardPalette.accent)
-        }
-
-        guard task.status == .doing else { return nil }
-
-        if appModel.isBackgroundTask(task.id) {
-            return ("后台运行", TaskBoardPalette.quiet)
-        }
-
-        return ("无计时", TaskBoardPalette.accentWarm)
-    }
-
-    private func activeTimerDetailText(for session: Session) -> String {
-        switch session.timerMode {
-        case .countUp:
-            return "已跑 \(formatDuration(TaskService.liveSeconds(for: session)))"
-        case .countdown:
-            return "剩余 \(formatDuration(TaskService.remainingSeconds(for: session) ?? 0))"
-        case .untimed:
-            return "无计时"
         }
     }
 
@@ -635,13 +603,14 @@ struct MainDashboardView: View {
     }
 
     private var importRecognitionButton: some View {
-        Button("识别任务") {
+        Button(appModel.isImportParsing ? "识别中..." : "识别任务") {
             _Concurrency.Task {
                 await appModel.createDraftFromImportText()
             }
         }
         .buttonStyle(.borderedProminent)
         .tint(TaskBoardPalette.accentWarm)
+        .disabled(appModel.isTaskIntakeBusy || appModel.isImportParsing || appModel.importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private var importCommitButton: some View {
@@ -650,6 +619,7 @@ struct MainDashboardView: View {
             selectedTaskID = appModel.currentTask?.id ?? appModel.tasks.first?.id
         }
         .buttonStyle(.bordered)
+        .disabled(appModel.isTaskIntakeBusy || appModel.latestDraftItems.isEmpty)
     }
 
     private var voiceImportButton: some View {
@@ -664,6 +634,7 @@ struct MainDashboardView: View {
         }
         .buttonStyle(.bordered)
         .tint(microphoneCapture.isRecording ? .red.opacity(0.86) : TaskBoardPalette.accent)
+        .disabled(appModel.isTaskIntakeBusy && !microphoneCapture.isRecording)
     }
 
     private func handleQuickVoiceCapture() {

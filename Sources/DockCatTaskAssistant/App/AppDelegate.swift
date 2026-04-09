@@ -1,6 +1,4 @@
 import AppKit
-import Combine
-import OnScreen
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -10,8 +8,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var taskPanelController: TaskStickyPanelController?
     private var dashboardPresenter: (() -> Void)?
     private var configured = false
-    private var cancellables = Set<AnyCancellable>()
-    private var pendingPetPrimaryClick: DispatchWorkItem?
     private weak var dashboardWindow: NSWindow?
     private var dashboardVisibleObserver: NSObjectProtocol?
     private var suppressUnexpectedDashboardUntil = Date.distantPast
@@ -33,8 +29,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.taskPanelController = TaskStickyPanelController(appModel: appModel)
         self.petWindowController = PetWindowController(appModel: appModel)
+        self.petWindowController?.onSingleClick = { [weak self] anchorFrame in
+            self?.showDockNote(anchorFrame: anchorFrame)
+        }
+        self.petWindowController?.onDoubleClick = { [weak self] in
+            self?.taskPanelController?.closePanel()
+            self?.showDashboard()
+        }
+        self.petWindowController?.onLongPress = { [weak self] in
+            self?.taskPanelController?.closePanel()
+            self?.appModel.toggleLowDistractionMode()
+        }
         self.petWindowController?.updatePosition(animated: false)
-        bindNotifications()
     }
 
     func toggleDockNote() {
@@ -44,11 +50,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showDashboard() {
         explicitDashboardPresentationUntil = Date().addingTimeInterval(0.9)
         suppressUnexpectedDashboardUntil = .distantPast
-        if let dashboardPresenter {
-            dashboardPresenter()
-        } else {
+        if let dashboardWindow {
+            dashboardWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            return
         }
+
+        dashboardPresenter?()
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func registerDashboardPresenter(_ presenter: @escaping () -> Void) {
@@ -78,47 +87,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        guard flag else { return false }
+        guard flag else {
+            showDashboard()
+            return true
+        }
         return true
     }
 
-    private func bindNotifications() {
-        NotificationCenter.default.publisher(for: .onScreenEntityPrimaryClick)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] notification in
-                guard let self else { return }
-                let anchorFrame = (notification.userInfo?[OnScreenNotificationUserInfoKey.windowFrame] as? NSValue)?.rectValue
-                let clickCount = notification.userInfo?[OnScreenNotificationUserInfoKey.clickCount] as? Int ?? 1
-                if clickCount >= 2 {
-                    self.pendingPetPrimaryClick?.cancel()
-                    self.pendingPetPrimaryClick = nil
-                    self.showDashboard()
-                } else {
-                    self.scheduleDockNotePresentation(anchorFrame: anchorFrame)
-                }
-            }
-            .store(in: &cancellables)
-
-        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.petWindowController?.updatePosition(animated: false)
-            }
-            .store(in: &cancellables)
-    }
-
-    private func scheduleDockNotePresentation(anchorFrame: CGRect?) {
-        pendingPetPrimaryClick?.cancel()
+    private func showDockNote(anchorFrame: CGRect?) {
         suppressUnexpectedDashboardUntil = Date().addingTimeInterval(max(NSEvent.doubleClickInterval, 0.35))
-
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.taskPanelController?.show(anchorFrame: anchorFrame)
-            self?.pendingPetPrimaryClick = nil
-        }
-
-        pendingPetPrimaryClick = workItem
-        let singleClickDelay = min(max(NSEvent.doubleClickInterval * 0.38, 0.1), 0.16)
-        DispatchQueue.main.asyncAfter(deadline: .now() + singleClickDelay, execute: workItem)
+        taskPanelController?.show(anchorFrame: anchorFrame)
     }
 
     private func handleUnexpectedDashboardVisibility() {

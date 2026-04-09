@@ -10,10 +10,6 @@ enum TaskService {
         return snapshot.tasks.first(where: { $0.id == selectedID })
     }
 
-    static func activeSession(in snapshot: AppSnapshot) -> Session? {
-        snapshot.sessions.first(where: { $0.state == .active && $0.endedAt == nil })
-    }
-
     static func task(id: UUID?, in snapshot: AppSnapshot) -> Task? {
         guard let id else { return nil }
         return snapshot.tasks.first(where: { $0.id == id })
@@ -48,21 +44,6 @@ enum TaskService {
 
         walk(parentID: nil, depth: 0)
         return map
-    }
-
-    static func liveSeconds(for session: Session, now: Date = .now) -> Int {
-        let base = session.totalSeconds
-        guard session.state == .active, session.endedAt == nil else {
-            return base
-        }
-        return base + max(0, Int(now.timeIntervalSince(session.startedAt)))
-    }
-
-    static func remainingSeconds(for session: Session, now: Date = .now) -> Int? {
-        guard session.timerMode == .countdown, let countdownTargetSeconds = session.countdownTargetSeconds else {
-            return nil
-        }
-        return max(0, countdownTargetSeconds - liveSeconds(for: session, now: now))
     }
 
     static func rootAncestorID(for taskID: UUID, in snapshot: AppSnapshot) -> UUID {

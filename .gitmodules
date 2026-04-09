@@ -1,0 +1,12 @@
+[submodule "ThirdParty/Upstreams/duckling"]
+	path = ThirdParty/Upstreams/duckling
+	url = https://github.com/facebook/duckling.git
+[submodule "ThirdParty/Upstreams/pet-therapy"]
+	path = ThirdParty/Upstreams/pet-therapy
+	url = https://github.com/yangyangnovelist-hub/pet-therapy.git
+[submodule "ThirdParty/Upstreams/whisper"]
+	path = ThirdParty/Upstreams/whisper
+	url = https://github.com/openai/whisper.git
+[submodule "ThirdParty/Upstreams/llama.cpp"]
+	path = ThirdParty/Upstreams/llama.cpp
+	url = https://github.com/ggerganov/llama.cpp.git

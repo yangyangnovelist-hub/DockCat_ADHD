@@ -1,0 +1,19 @@
+{
+  "scenarios": {
+    "idle_app_launch": {
+      "max_physical_footprint_mb": 200.0,
+      "max_peak_physical_footprint_mb": 240.0,
+      "max_rss_mb": 260.0
+    },
+    "workload_snapshot_burst": {
+      "max_physical_footprint_mb": 260.0,
+      "max_peak_physical_footprint_mb": 320.0,
+      "max_rss_mb": 340.0
+    },
+    "workload_cold_restore": {
+      "max_physical_footprint_mb": 260.0,
+      "max_peak_physical_footprint_mb": 320.0,
+      "max_rss_mb": 340.0
+    }
+  }
+}
