@@ -39,7 +39,7 @@ let package = Package(
                 .product(name: "Defaults", package: "Defaults"),
             ],
             resources: [
-                .process("Resources/PetIdleFront.jpg"),
+                .process("Resources/PetIdleFront.png"),
                 .process("Resources/DashCatAvatar.jpg"),
                 .process("Resources/DockCatAppIcon.png"),
                 .copy("Resources/MindMapApp"),

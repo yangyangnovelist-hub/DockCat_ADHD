@@ -1148,6 +1148,10 @@
 		<data>
 		mioKSarkG1vhxXEx4vUzxidw4bA=
 		</data>
+		<key>Resources/DockCatTaskAssistant_DockCatTaskAssistant.bundle/PetIdleFront.png</key>
+		<data>
+		V9q4Sm0HWfChsIIt5I+5BfBcLGs=
+		</data>
 		<key>Resources/GRDB_GRDB.bundle/Info.plist</key>
 		<data>
 		7g0CDUAAkeHXoZohLhU1fyFxbzA=
@@ -5399,6 +5403,13 @@
 			<key>hash2</key>
 			<data>
 			8XCUcKJucgHB+NLZHWPFRj0jsqmJLI0dSWc689b1szY=
+			</data>
+		</dict>
+		<key>Resources/DockCatTaskAssistant_DockCatTaskAssistant.bundle/PetIdleFront.png</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			GjTQCNPr3Wz4QDuimWk0x/vqbRHVYEsbTG1ipeFqsog=
 			</data>
 		</dict>
 		<key>Resources/GRDB_GRDB.bundle/Info.plist</key>

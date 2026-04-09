@@ -134,7 +134,7 @@ private struct PetWindowConfiguration {
 
     @MainActor
     private static func petImage() -> NSImage {
-        if let url = Bundle.module.url(forResource: "PetIdleFront", withExtension: "jpg"),
+        if let url = Bundle.module.url(forResource: "PetIdleFront", withExtension: "png"),
            let image = NSImage(contentsOf: url) {
             return image
         }
